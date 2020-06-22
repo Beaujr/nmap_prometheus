@@ -43,12 +43,13 @@ var metrics map[string]prometheus.Gauge
 var debug = flag.Bool("debug", false, "Debug mode")
 
 var (
-	people_home = promauto.NewGauge(prometheus.GaugeOpts{
+	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "home_detector_people_home",
 		Help: "The total number of houseDevices at home",
 	})
 )
 
+// HomeManager manages devices and metric collection
 type HomeManager interface {
 	adjustLights(lightGroup string, brightness string) error
 	deviceDetectState(phone device) int64
@@ -60,6 +61,8 @@ type HomeManager interface {
 	iotStatusManager() error
 	recordMetrics()
 }
+
+// Server is an implementation of the proto HomeDetectorServer
 type Server struct {
 	pb.UnimplementedHomeDetectorServer
 }
@@ -86,11 +89,6 @@ func readConfig(filename string) ([]*device, error) {
 	}
 	return result, nil
 }
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
 
 func writeConfig(filename string) error {
 	d1, err := yaml.Marshal(append(houseDevices, iotDevices...))
@@ -104,6 +102,7 @@ func writeConfig(filename string) error {
 	return nil
 }
 
+// NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	server := &Server{}
 	allDevices, err := readConfig("config/devices.yaml")
@@ -176,7 +175,7 @@ func (s *Server) recordMetrics() {
 					homeCounter++
 				}
 			}
-			people_home.Set(float64(homeCounter))
+			peopleHome.Set(float64(homeCounter))
 
 			for _, item := range append(iotDevices, houseDevices...) {
 				state := 1

@@ -15,10 +15,12 @@ type Reporter struct {
 	address string
 }
 
+// NewReporter returns a Reporter for gRPC
 func NewReporter(address string) Reporter {
 	return Reporter{address: address}
 }
 
+// Address reports pb.AddressRequest to the GRPC server
 func (r *Reporter) Address(items []pb.AddressRequest) error {
 	for _, item := range items {
 		conn, err := grpc.Dial(r.address, grpc.WithInsecure())
