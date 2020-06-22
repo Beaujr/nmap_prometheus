@@ -1,4 +1,5 @@
 FROM golang:1.13.3-alpine3.10 as builder
+
 ARG APP_NAME
 RUN apk update && apk add curl make git gcc cmake g++ ca-certificates
 RUN mkdir -p /go/src/github.com/beaujr/${APP_NAME}
@@ -12,11 +13,13 @@ COPY . .
 ARG GOOS
 ARG GOARCH
 ARG APP_TYPE
-RUN make build GOOS=${GOOS} GOARCH=${GOARCH} APP_TYPE=${APP_TYPE}
 
+ENV GOOS $TARGETOS
+ENV GOARCH $TARGETARCH
+
+RUN make build GOOS=${GOOS} GOARCH=${GOARCH} APP_TYPE=${APP_TYPE}
 RUN mv bin/beaujr/${APP_NAME}-${APP_TYPE}-${GOOS}_${GOARCH} bin/beaujr/${APP_NAME}
 
-# https://hub.docker.com/_/alpine
 FROM scratch
 
 ARG APP_NAME

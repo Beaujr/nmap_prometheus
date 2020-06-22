@@ -72,25 +72,29 @@ go_fmt:
 
 # Docker targets
 ################
-docker_build:
+docker_build: DOCKERFILE=Dockerfile
 ifeq ($(APP_TYPE),client)
-	docker build \
+	docker buildx build \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
 		--build-arg GOARCH=$(GOARCH) \
 		--build-arg GOOS=$(GOOS) \
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
-		-f $(DOCKERFILES)/Dockerfile.$(GOARCH) \
-		./
+		--platform linux/amd64,linux/arm/v7 \
+		--output "type=registry,push=true" \
+		-f $(DOCKERFILES)/Dockerfile.client \
+     	./
 else
-	docker build \
+	docker buildx build \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
 		--build-arg GOARCH=$(GOARCH) \
 		--build-arg GOOS=$(GOOS) \
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
+		--platform linux/amd64,linux/arm/v7 \
+		--output "type=registry,push=true" \
 		-f $(DOCKERFILES)/Dockerfile \
 		./
 endif
