@@ -76,10 +76,10 @@ docker_build:
 		--build-arg VCS_REF=$(GIT_COMMIT) \
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
-		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
+		--tag $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
 		--platform linux/amd64,linux/arm/v7 \
 		--output "type=$(TYPE)" \
-		-f $(DOCKERFILES)/$(DOCKERFILE) \
+		--file $(DOCKERFILES)/$(DOCKERFILE) \
 		./
 
 docker_run:
