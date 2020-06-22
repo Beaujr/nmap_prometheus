@@ -213,6 +213,7 @@ func (s *Server) deviceDetectState(item device) int64 {
 	return lastSeen
 }
 
+//Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
 	newDevice := true

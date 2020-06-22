@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// Scan executes the nmap binary and parses the result
 func Scan(subnet string) ([]pb.AddressRequest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()

@@ -10,6 +10,7 @@ import (
 
 var fcmUrl = flag.String("fcm", "http://fcmUrl", "Google Firbase Cloud Messaging URL")
 
+// SendNotification to GCM topic defined in fcmUrl
 func SendNotification(title string, message string) error {
 	log.Printf("Notification: %s , %s", title, message)
 	payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")

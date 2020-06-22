@@ -37,6 +37,7 @@ type psResponse struct {
 	Text string `json:"text"`
 }
 
+// Call assistant relay with command
 func Call(command string) (*string, error) {
 	payload := strings.NewReader("{\"user\":\"beau\",\"command\":\"" + command + "\", \"converse\": false}")
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", &assistantUrl, assistantPath), payload)
