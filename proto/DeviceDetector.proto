@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option go_package = "proto";
+
+package proto;
+
+// The greeting service definition.
+service HomeDetector {
+  // Sends a greeting
+  rpc Ack (BleRequest) returns (Reply) {}
+  rpc Address (AddressRequest) returns (Reply) {}
+}
+
+// The request message containing the user's name.
+message BleRequest {
+  string mac = 1;
+}
+
+// The request message containing the user's name.
+message AddressRequest {
+  string ip = 1;
+  string mac = 2;
+}
+
+// The response message containing the greetings
+message Reply {
+  bool acknowledged = 1;
+}
