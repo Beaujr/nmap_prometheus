@@ -22,7 +22,7 @@ GOLDFLAGS := -ldflags "-X $(PACKAGE_NAME)/pkg/util.AppGitCommit=${GIT_COMMIT} -X
 
 .PHONY: verify build docker_build push generate generate_verify \
 	go_fcm_server go_test go_fmt e2e_test go_verify   \
-	docker_build docker_push
+	docker_push
 
 # Alias targets
 ###############
@@ -69,12 +69,10 @@ go_fmt:
 		exit 1; \
 	fi
 
-
-# Docker targets
-################
+docker_build: DOCKERFILE=Dockerfile
+docker_build: PUSH=false
 docker_build:
-ifeq ($(APP_TYPE),client)
-	docker buildx build \
+	docker buildx \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
 		--build-arg GOARCH=$(GOARCH) \
 		--build-arg GOOS=$(GOOS) \
@@ -82,22 +80,9 @@ ifeq ($(APP_TYPE),client)
 		--build-arg APP_NAME=$(REPO_NAME) \
 		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
 		--platform linux/amd64,linux/arm/v7 \
-		--output "type=registry,push=true" \
-		-f $(DOCKERFILES)/Dockerfile.client \
-     	./
-else
-	docker buildx build \
-		--build-arg VCS_REF=$(GIT_COMMIT) \
-		--build-arg GOARCH=$(GOARCH) \
-		--build-arg GOOS=$(GOOS) \
-		--build-arg APP_TYPE=$(APP_TYPE) \
-		--build-arg APP_NAME=$(REPO_NAME) \
-		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
-		--platform linux/amd64,linux/arm/v7 \
-		--output "type=registry,push=true" \
-		-f $(DOCKERFILES)/Dockerfile \
+		--output "type=registry,push=false" \
+		-f $(DOCKERFILES)/$(DOCKERFILE) \
 		./
-endif
 
 docker_run:
 	@docker run -p $(PORT):$(PORT) -v $(shell pwd)/config:/config $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) -port=$(PORT)

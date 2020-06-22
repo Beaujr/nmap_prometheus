@@ -23,6 +23,6 @@ jobs:
     - name: Build the amd64 Docker image
       run: make docker_build GOARCH=amd64 APP_TYPE=server
     - name: Build the arm Client Docker image
-      run: make docker_build GOARCH=arm APP_TYPE=client
+      run: make docker_build GOARCH=arm APP_TYPE=client DOCKERFILE=Dockerfile.client
     - name: Build the amd64 Client Docker image
-      run: make docker_build GOARCH=amd64 APP_TYPE=client
+      run: make docker_build GOARCH=amd64 APP_TYPE=client DOCKERFILE=Dockerfile.client
