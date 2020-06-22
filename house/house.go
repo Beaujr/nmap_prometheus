@@ -244,7 +244,15 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	return nil
 }
 
-func (s *Server) existingDevice(houseDevice *device) error {
+func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest) error {
+	if incoming.Ip != "" {
+		houseDevice.Id.Ip = incoming.Ip
+	}
+
+	if incoming.Mac != "" {
+		houseDevice.Id.Mac = incoming.Mac
+	}
+
 	log.Println(houseDevice.Name)
 	timeAway := s.deviceDetectState(*houseDevice)
 	if timeAway > *timeAwaySeconds && houseDevice.Person {
@@ -275,11 +283,6 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			houseDevice.Id.Ip != incoming.Ip && incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac ||
 			houseDevice.Id.Ip == incoming.Ip && incoming.Ip != "" && incoming.Mac != houseDevice.Id.Mac {
 			newDevice = false
-			if incoming.Ip != "" {
-				houseDevice.Id.Ip = incoming.Ip
-			} else if incoming.Mac != "" {
-				houseDevice.Id.Mac = incoming.Mac
-			}
 			return nil, s.existingDevice(houseDevice)
 		}
 	}
