@@ -283,7 +283,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			houseDevice.Id.Ip != incoming.Ip && incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac ||
 			houseDevice.Id.Ip == incoming.Ip && incoming.Ip != "" && incoming.Mac != houseDevice.Id.Mac {
 			newDevice = false
-			return nil, s.existingDevice(houseDevice)
+			return nil, s.existingDevice(houseDevice, incoming)
 		}
 	}
 	if newDevice {
