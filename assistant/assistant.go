@@ -87,30 +87,26 @@ func downloadFile(url string, command string) (*psResponse, error) {
 	if command == tvCheck {
 		if resp.ContentLength == tvIsOnLength {
 			return &psResponse{Text: "on"}, err
-		} else {
-			return &psResponse{Text: "off"}, err
 		}
+		return &psResponse{Text: "off"}, err
 	}
 	if command == deskCheck {
 		if resp.ContentLength == deskIsOnLength {
 			return &psResponse{Text: "on"}, err
-		} else {
-			return &psResponse{Text: "off"}, err
 		}
+		return &psResponse{Text: "off"}, err
 	}
 	if command == boxroomLightCheck {
 		if resp.ContentLength == boxRoomLightIsOnLength {
 			return &psResponse{Text: "on"}, err
-		} else {
-			return &psResponse{Text: "off"}, err
 		}
+		return &psResponse{Text: "off"}, err
 	}
 	if command == loungeLightCheck {
 		if resp.ContentLength == livingLightIsOnLength {
 			return &psResponse{Text: "on"}, err
-		} else {
-			return &psResponse{Text: "off"}, err
 		}
+		return &psResponse{Text: "off"}, err
 	}
 
 	return &psResponse{Text: "success"}, nil

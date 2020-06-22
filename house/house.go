@@ -51,12 +51,12 @@ var (
 
 type HomeManager interface {
 	adjustLights(lightGroup string, brightness string) error
-	DeviceDetectState(phone device) int64
-	DeviceManager() error
+	deviceDetectState(phone device) int64
+	deviceManager() error
 	isDeviceOn(iot *device) (bool, error)
 	isHouseEmpty() bool
 	httpHealthCheck(url string) bool
-	IotDeviceManager(iotDevice *device) error
+	iotdeviceManager(iotDevice *device) error
 	iotStatusManager() error
 	recordMetrics()
 }
@@ -120,7 +120,7 @@ func NewServer() HomeManager {
 
 	c := cron.New(cron.WithSeconds())
 	c.AddFunc("*/10 * * * * *", func() {
-		err := server.DeviceManager()
+		err := server.deviceManager()
 		if err != nil {
 			log.Println(err)
 		}
@@ -209,7 +209,7 @@ func (s *Server) callAssistant(command string) (*string, error) {
 	return assistant.Call(command)
 }
 
-func (s *Server) DeviceDetectState(item device) int64 {
+func (s *Server) deviceDetectState(item device) int64 {
 	lastSeen := int64(time.Now().Unix()) - item.LastSeen
 	return lastSeen
 }
@@ -232,7 +232,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			}
 			newDevice = false
 			log.Println(houseDevice.Name)
-			timeAway := s.DeviceDetectState(*houseDevice)
+			timeAway := s.deviceDetectState(*houseDevice)
 			if timeAway > *timeAwaySeconds && houseDevice.Person {
 				log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
 				if *debug {
@@ -294,7 +294,7 @@ func (s *Server) httpHealthCheck(url string) bool {
 }
 
 func (s *Server) isDeviceOn(iot *device) (bool, error) {
-	lastSeen := s.DeviceDetectState(*iot)
+	lastSeen := s.deviceDetectState(*iot)
 	if lastSeen > int64(syncStatusWithGA) {
 		state, err := s.callAssistant(iot.Command)
 		if err != nil {
@@ -319,7 +319,7 @@ func (s *Server) isHouseEmpty() bool {
 
 func (s *Server) iotStatusManager() error {
 	for _, device := range iotDevices {
-		err := s.IotDeviceManager(device)
+		err := s.iotdeviceManager(device)
 		if err != nil {
 			return err
 		}
@@ -327,7 +327,7 @@ func (s *Server) iotStatusManager() error {
 	return nil
 }
 
-func (s *Server) IotDeviceManager(iotDevice *device) error {
+func (s *Server) iotdeviceManager(iotDevice *device) error {
 	houseEmpty := s.isHouseEmpty()
 	on, err := s.isDeviceOn(iotDevice)
 	if err != nil {
@@ -351,9 +351,9 @@ func (s *Server) IotDeviceManager(iotDevice *device) error {
 	return nil
 }
 
-func (s *Server) DeviceManager() error {
+func (s *Server) deviceManager() error {
 	for _, device := range houseDevices {
-		timeAway := s.DeviceDetectState(*device)
+		timeAway := s.deviceDetectState(*device)
 		if timeAway > *timeAwaySeconds && !device.Away {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
