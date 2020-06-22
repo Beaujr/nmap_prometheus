@@ -213,6 +213,57 @@ func (s *Server) deviceDetectState(item device) int64 {
 	return lastSeen
 }
 
+func (s *Server) newDevice(in *pb.AddressRequest) error {
+	name := in.Ip
+	if in.Mac != "" {
+		name = in.Mac
+	}
+	newDevice := device{
+		Name:     strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
+		Id:       networkId{Ip: in.Ip, Mac: in.Mac},
+		Away:     false,
+		LastSeen: int64(time.Now().Unix()),
+		Person:   false,
+		Command:  "",
+	}
+
+	log.Println(fmt.Printf("New Device: %s", name))
+	if !*debug {
+		err := notifications.SendNotification(newDevice.Name, "New Device")
+		if err != nil {
+			return err
+		}
+	}
+
+	houseDevices = append(houseDevices, &newDevice)
+	err := writeConfig("config/devices.yaml")
+	if err != nil {
+		return err
+	}
+	s.registerMetric(newDevice)
+	return nil
+}
+
+func (s *Server) existingDevice(houseDevice *device) error {
+	log.Println(houseDevice.Name)
+	timeAway := s.deviceDetectState(*houseDevice)
+	if timeAway > *timeAwaySeconds && houseDevice.Person {
+		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
+		if *debug {
+			log.Printf("Notification: %s, %s", houseDevice.Name, "is home")
+		} else {
+			err := notifications.SendNotification(houseDevice.Name, "has returned home.")
+			if err != nil {
+				return err
+			}
+		}
+
+	}
+	houseDevice.Away = false
+	houseDevice.LastSeen = int64(time.Now().Unix())
+	return nil
+}
+
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
@@ -224,59 +275,17 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			houseDevice.Id.Ip == incoming.Ip && incoming.Mac == "" ||
 			houseDevice.Id.Ip != incoming.Ip && incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac ||
 			houseDevice.Id.Ip == incoming.Ip && incoming.Ip != "" && incoming.Mac != houseDevice.Id.Mac {
-
+			newDevice = false
 			if incoming.Ip != "" {
 				houseDevice.Id.Ip = incoming.Ip
 			} else if incoming.Mac != "" {
 				houseDevice.Id.Mac = incoming.Mac
 			}
-			newDevice = false
-			log.Println(houseDevice.Name)
-			timeAway := s.deviceDetectState(*houseDevice)
-			if timeAway > *timeAwaySeconds && houseDevice.Person {
-				log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
-				if *debug {
-					log.Printf("Notification: %s, %s", houseDevice.Name, "is home")
-				} else {
-					err := notifications.SendNotification(houseDevice.Name, "has returned home.")
-					if err != nil {
-						return nil, err
-					}
-				}
-
-			}
-			houseDevice.Away = false
-			houseDevice.LastSeen = int64(time.Now().Unix())
+			return nil, s.existingDevice(houseDevice)
 		}
 	}
 	if newDevice {
-		name := in.Ip
-		if in.Mac != "" {
-			name = in.Mac
-		}
-		newDevice := device{
-			Name:     strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
-			Id:       networkId{Ip: in.Ip, Mac: in.Mac},
-			Away:     false,
-			LastSeen: int64(time.Now().Unix()),
-			Person:   false,
-			Command:  "",
-		}
-
-		log.Println(fmt.Printf("New Device: %s", name))
-		if !*debug {
-			err := notifications.SendNotification(newDevice.Name, "New Device")
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		houseDevices = append(houseDevices, &newDevice)
-		err := writeConfig("config/devices.yaml")
-		if err != nil {
-			return nil, err
-		}
-		s.registerMetric(newDevice)
+		return nil, s.newDevice(in)
 	}
 	return &pb.Reply{Acknowledged: true}, nil
 }

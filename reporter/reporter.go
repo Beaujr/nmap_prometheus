@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// Reporter is the struct to handle GRP Comms
 type Reporter struct {
 	address string
 }
