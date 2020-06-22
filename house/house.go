@@ -64,7 +64,7 @@ type Server struct {
 	pb.UnimplementedHomeDetectorServer
 }
 
-func readConfig(filename string) []*device {
+func readConfig(filename string) ([]*device, error) {
 	// Open our yamlFile
 	yamlFile, err := os.Open(filename)
 	// if we os.Open returns an error then handle it
@@ -72,15 +72,19 @@ func readConfig(filename string) []*device {
 		fmt.Println(err)
 	}
 	log.Println(fmt.Sprintf("Successfully Opened: %s", filename))
-	// defer the closing of our yamlFile so that we can parse it later on
 	defer yamlFile.Close()
 
-	byteValue, _ := ioutil.ReadAll(yamlFile)
+	byteValue, err := ioutil.ReadAll(yamlFile)
+	if err != nil {
+		return nil, err
+	}
 
 	var result []*device
 	err = yaml.Unmarshal(byteValue, &result)
-
-	return result
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 func check(e error) {
 	if e != nil {
@@ -102,7 +106,10 @@ func writeConfig(filename string) error {
 
 func NewServer() HomeManager {
 	server := &Server{}
-	allDevices := readConfig("config/devices.yaml")
+	allDevices, err := readConfig("config/devices.yaml")
+	if err != nil {
+		log.Println(err)
+	}
 	for _, item := range allDevices {
 		if item.Smart {
 			iotDevices = append(iotDevices, item)
@@ -243,11 +250,9 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 		}
 	}
 	if newDevice {
-		name := "unknown device"
+		name := in.Ip
 		if in.Mac != "" {
 			name = in.Mac
-		} else {
-			name = in.Ip
 		}
 		newDevice := device{
 			Name:     strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
@@ -258,7 +263,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			Command:  "",
 		}
 
-		log.Println(fmt.Printf("New Device: %s", newDevice.Name))
+		log.Println(fmt.Printf("New Device: %s", name))
 		if !*debug {
 			err := notifications.SendNotification(newDevice.Name, "New Device")
 			if err != nil {

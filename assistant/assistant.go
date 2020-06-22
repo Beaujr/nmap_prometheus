@@ -39,7 +39,11 @@ type psResponse struct {
 
 func Call(command string) (*string, error) {
 	payload := strings.NewReader("{\"user\":\"beau\",\"command\":\"" + command + "\", \"converse\": false}")
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/%s", assistantUrl, assistantPath), payload)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+		return nil, err
+	}
 	req.Header.Add("content-type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {

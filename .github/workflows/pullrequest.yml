@@ -14,9 +14,9 @@ jobs:
       run: make score GITOPS_API_KEY=${{ secrets.GITOPS_API_KEY }} GITHUB_USER=gogitops GITHUB_TOKEN=${{secrets.GITHUB_API_TOKEN}}
     - name: Build the ARM Docker image
       run: make docker_build ARCH=arm TYPE=server
-    - name: Push the ARM Docker image
-      run: make docker_push ARCH=arm TYPE=server  DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
+#    - name: Push the ARM Docker image
+#      run: make docker_push ARCH=arm TYPE=server  DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
     - name: Build the amd64 Docker image
       run: make docker_build GOARCH=amd64 TYPE=server
-    - name: Build the amd64 Docker image
-      run: make docker_push GOARCH=amd64 TYPE=server DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
+#    - name: Build the amd64 Docker image
+#      run: make docker_push GOARCH=amd64 TYPE=server DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
