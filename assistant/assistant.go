@@ -15,13 +15,13 @@ const (
 	assistantPath          = "assistant"
 	pocketSphinxUrl        = "http://localhost:8085/stt"
 	tvIsOnLength           = 64512
-	DeskIsOnLength         = 46840
-	BoxRoomLightIsOnLength = 56878
-	LivingLightIsOnLength  = 322078
-	TVCheck                = "IS THE TV ON?"
-	DeskCheck              = "IS THE DESK ON?"
-	BoxroomLightCheck      = "IS LIGHT BULB ON?"
-	LoungeLightCheck       = "Are the Living room lights on?"
+	deskIsOnLength         = 46840
+	boxRoomLightIsOnLength = 56878
+	livingLightIsOnLength  = 322078
+	tvCheck                = "IS THE TV ON?"
+	deskCheck              = "IS THE DESK ON?"
+	boxroomLightCheck      = "IS LIGHT BULB ON?"
+	loungeLightCheck       = "Are the Living room lights on?"
 )
 
 var assistantUrl = flag.String("assistant", "http://assistant_relay", "Google Assistant URL")
@@ -39,7 +39,7 @@ type psResponse struct {
 
 func Call(command string) (*string, error) {
 	payload := strings.NewReader("{\"user\":\"beau\",\"command\":\"" + command + "\", \"converse\": false}")
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", &assistantUrl, assistantPath), payload)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return nil, err
@@ -84,29 +84,29 @@ func downloadFile(url string, command string) (*psResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	if command == TVCheck {
+	if command == tvCheck {
 		if resp.ContentLength == tvIsOnLength {
 			return &psResponse{Text: "on"}, err
 		} else {
 			return &psResponse{Text: "off"}, err
 		}
 	}
-	if command == DeskCheck {
-		if resp.ContentLength == DeskIsOnLength {
+	if command == deskCheck {
+		if resp.ContentLength == deskIsOnLength {
 			return &psResponse{Text: "on"}, err
 		} else {
 			return &psResponse{Text: "off"}, err
 		}
 	}
-	if command == BoxroomLightCheck {
-		if resp.ContentLength == BoxRoomLightIsOnLength {
+	if command == boxroomLightCheck {
+		if resp.ContentLength == boxRoomLightIsOnLength {
 			return &psResponse{Text: "on"}, err
 		} else {
 			return &psResponse{Text: "off"}, err
 		}
 	}
-	if command == LoungeLightCheck {
-		if resp.ContentLength == LivingLightIsOnLength {
+	if command == loungeLightCheck {
+		if resp.ContentLength == livingLightIsOnLength {
 			return &psResponse{Text: "on"}, err
 		} else {
 			return &psResponse{Text: "off"}, err
