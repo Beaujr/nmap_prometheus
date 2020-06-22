@@ -72,7 +72,7 @@ go_fmt:
 docker_build: DOCKERFILE=Dockerfile
 docker_build: PUSH=false
 docker_build:
-	docker buildx \
+	docker buildx build \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
 		--build-arg GOARCH=$(GOARCH) \
 		--build-arg GOOS=$(GOOS) \
