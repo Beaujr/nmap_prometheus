@@ -71,6 +71,7 @@ go_fmt:
 
 docker_build: DOCKERFILE=Dockerfile
 docker_build: PUSH=false
+docker_build: TYPE=image
 docker_build:
 	docker buildx build \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
@@ -80,7 +81,7 @@ docker_build:
 		--build-arg APP_NAME=$(REPO_NAME) \
 		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
 		--platform linux/amd64,linux/arm/v7 \
-		--output "type=registry,push=false" \
+		--output "type=$(TYPE),push=$(PUSH)" \
 		-f $(DOCKERFILES)/$(DOCKERFILE) \
 		./
 
