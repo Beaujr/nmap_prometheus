@@ -46,6 +46,7 @@ func (r *Reporter) Address(items []pb.AddressRequest) error {
 	return nil
 }
 
+// Bles is for handling Bluetooth Mac addresses
 func (r *Reporter) Bles(macs []*string) error {
 	for _, mac := range macs {
 		fmt.Println(*mac)

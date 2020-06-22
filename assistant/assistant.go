@@ -40,7 +40,7 @@ type psResponse struct {
 // Call assistant relay with command
 func Call(command string) (*string, error) {
 	payload := strings.NewReader("{\"user\":\"beau\",\"command\":\"" + command + "\", \"converse\": false}")
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", &assistantUrl, assistantPath), payload)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return nil, err
@@ -78,8 +78,9 @@ func Call(command string) (*string, error) {
 func downloadFile(url string, command string) (*psResponse, error) {
 
 	// Get the data
-	log.Println(fmt.Sprintf("%s%s", assistantUrl, url))
-	resp, err := http.Get(fmt.Sprintf("%s%s", assistantUrl, url))
+	fcmServerUrl := fmt.Sprintf("%s%s", *assistantUrl, url)
+	log.Println(fcmServerUrl)
+	resp, err := http.Get(fcmServerUrl)
 	if err != nil {
 		return nil, err
 	}
