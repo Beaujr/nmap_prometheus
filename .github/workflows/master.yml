@@ -1,0 +1,16 @@
+name: Master Build
+
+on:
+  push:
+    branches:
+    - 'master'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build the Server Docker image
+      run: make docker-build-and-push PUSH=true TYPE=registry APP_TYPE=server DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
+    - name: Build the Client Docker image
+      run: make docker-build-and-push PUSH=true TYPE=registry APP_TYPE=client DOCKERFILE=Dockerfile.client DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
