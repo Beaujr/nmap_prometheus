@@ -91,7 +91,7 @@ else
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
-		-f $(DOCKERFILES)/Dockerfile.server \
+		-f $(DOCKERFILES)/Dockerfile \
 		./
 endif
 
