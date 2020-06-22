@@ -10,19 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Build the ARM Docker image
-      run: make docker_build ARCH=arm APP_TYPE=server
-    - name: Push the ARM Docker image
-      run: make docker_push ARCH=arm APP_TYPE=server  DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
-    - name: Build the amd64 Docker image
-      run: make docker_build GOARCH=amd64 APP_TYPE=server
-    - name: Build the amd64 Docker image
-      run: make docker_push GOARCH=amd64 APP_TYPE=server DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
-    - name: Build the ARM Client Docker image
-      run: make docker_build ARCH=arm APP_TYPE=client
-    - name: Push the ARM Docker image
-      run: make docker_push ARCH=arm APP_TYPE=client  DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
-    - name: Build the amd64 Docker image
-      run: make docker_build GOARCH=amd64 APP_TYPE=client
-    - name: Build the amd64 Docker image
-      run: make docker_push GOARCH=amd64 APP_TYPE=client DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
+    - name: Build the Server Docker image
+      run: make docker-build-and-push PUSH=true TYPE=registry APP_TYPE=server DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
+    - name: Build the Client Docker image
+      run: make docker-build-and-push PUSH=true TYPE=registry APP_TYPE=client DOCKERFILE=Dockerfile.client DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}

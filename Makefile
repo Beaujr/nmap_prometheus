@@ -16,8 +16,7 @@ DOCKERFILES := build
 # Go build flags
 GOOS := linux
 GOARCH := amd64
-#GIT_COMMIT := $(shell git rev-parse --short HEAD)
-GIT_COMMIT := tttt
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOLDFLAGS := -ldflags "-X $(PACKAGE_NAME)/pkg/util.AppGitCommit=${GIT_COMMIT} -X $(PACKAGE_NAME)/pkg/util.AppVersion=${IMAGE_TAG}"
 
 .PHONY: verify build docker_build push generate generate_verify \
@@ -68,6 +67,9 @@ go_fmt:
 		echo "$$GO_FMT"; \
 		exit 1; \
 	fi
+
+docker-build-and-push: BUILD_TAG=$(IMAGE_TAG)-$(APP_TYPE)-$(GIT_COMMIT)
+docker-build-and-push: | docker-login docker_build
 
 docker_build: DOCKERFILE=Dockerfile
 docker_build: PUSH=false
