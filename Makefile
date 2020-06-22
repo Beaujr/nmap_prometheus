@@ -72,7 +72,7 @@ go_fmt:
 
 # Docker targets
 ################
-docker_build: DOCKERFILE=Dockerfile
+docker_build:
 ifeq ($(APP_TYPE),client)
 	docker buildx build \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
