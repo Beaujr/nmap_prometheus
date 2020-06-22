@@ -10,16 +10,10 @@ WORKDIR /go/src/github.com/beaujr/${APP_NAME}
 
 COPY . .
 
-ARG GOOS
-ARG GOARCH
 ARG APP_TYPE
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
-ENV GOOS $TARGETOS
-ENV GOARCH $TARGETARCH
 
-RUN make build GOOS=${GOOS} GOARCH=${GOARCH} APP_TYPE=${APP_TYPE}
-RUN mv bin/beaujr/${APP_NAME}-${APP_TYPE}-${GOOS}_${GOARCH} bin/beaujr/${APP_NAME}
+RUN make build APP_TYPE=${APP_TYPE}
+RUN mv bin/beaujr/${APP_NAME}-${APP_TYPE} bin/beaujr/${APP_NAME}
 
 FROM scratch
 
