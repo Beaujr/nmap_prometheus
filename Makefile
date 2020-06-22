@@ -13,9 +13,6 @@ PORT := 1234
 # Path to dockerfiles directory
 DOCKERFILES := build
 
-# Go build flags
-GOOS := linux
-GOARCH := amd64
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GOLDFLAGS := -ldflags "-X $(PACKAGE_NAME)/pkg/util.AppGitCommit=${GIT_COMMIT} -X $(PACKAGE_NAME)/pkg/util.AppVersion=${IMAGE_TAG}"
 
@@ -40,9 +37,9 @@ go_mod:
 
 nmap_prometheus:
 	cd $(APP_TYPE) && \
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build  \
+	CGO_ENABLED=0 go build  \
 		-a -tags netgo \
-		-o $(BINPATH)/${APP_NAME}-$(APP_TYPE)-$(GOOS)_$(GOARCH) \
+		-o $(BINPATH)/${APP_NAME}-$(APP_TYPE) \
 		./
 
 go_test:
@@ -77,8 +74,6 @@ docker_build: TYPE=image
 docker_build:
 	docker buildx build \
 		--build-arg VCS_REF=$(GIT_COMMIT) \
-		--build-arg GOARCH=$(GOARCH) \
-		--build-arg GOOS=$(GOOS) \
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		-t $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
