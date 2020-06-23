@@ -32,7 +32,6 @@ func (r *Reporter) Address(items []pb.AddressRequest) error {
 		c := pb.NewHomeDetectorClient(conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
 		defer cancel()
-		log.Println(item)
 		response, err := c.Address(ctx, &item)
 		if err != nil {
 			grpcError := status.FromContextError(err)

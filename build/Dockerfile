@@ -20,6 +20,8 @@ FROM scratch
 ARG APP_NAME
 WORKDIR /
 COPY --from=builder /go/src/github.com/beaujr/${APP_NAME}/bin/beaujr/${APP_NAME} app
+COPY --from=builder /etc/ssl/certs/ /etc/ssl/certs/
+
 ENTRYPOINT ["./app"]
 ARG VCS_REF
 LABEL org.label-schema.vcs-ref=$VCS_REF \

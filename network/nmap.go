@@ -36,7 +36,6 @@ func Scan(subnet string) ([]pb.AddressRequest, error) {
 
 	// Use the results to print an example output
 	addresses := make([]pb.AddressRequest, 0)
-	log.Println(result.Hosts)
 	for _, host := range result.Hosts {
 		item := pb.AddressRequest{}
 		for _, address := range host.Addresses {
