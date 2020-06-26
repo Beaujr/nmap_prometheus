@@ -99,11 +99,11 @@ This will be supported in limited capacity with the following flags.
    version: '2'
    services:
      client:
-       image: beaujr/nmap_prometheus:0.1-client-ade6cd9
+       image: beaujr/nmap_prometheus:client-latest
        command: '-server=localhost:50051 -subnet=192.168.1.100-255'
        network_mode: host
      server:
-       image: beaujr/nmap_prometheus:0.1-server-ade6cd9
+       image: beaujr/nmap_prometheus:server-latest
        ports:
          - 50051:50051
          - 2112:2112

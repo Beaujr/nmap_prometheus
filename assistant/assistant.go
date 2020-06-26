@@ -24,8 +24,10 @@ const (
 	loungeLightCheck       = "Are the Living room lights on?"
 )
 
-var assistantUrl = flag.String("assistant", "http://assistant_relay", "Google Assistant URL")
-var assistantUser = flag.String("assistantUser", "yourAssistRelayUSer", "Google Assistant Relay User")
+var (
+	assistantUrl  = flag.String("assistant", "http://assistant_relay", "Google Assistant URL")
+	assistantUser = flag.String("assistantUser", "yourAssistRelayUSer", "Google Assistant Relay User")
+)
 
 type gaResponse struct {
 	Response string `json:"response"`
@@ -40,7 +42,7 @@ type psResponse struct {
 
 // Call assistant relay with command
 func Call(command string) (*string, error) {
-	payload := strings.NewReader("{\"user\":\""+*assistantUser+"\",\"command\":\"" + command + "\", \"converse\": false}")
+	payload := strings.NewReader("{\"user\":\"" + *assistantUser + "\",\"command\":\"" + command + "\", \"converse\": false}")
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
 	if err != nil {
 		log.Printf("Error: %s\n", err)

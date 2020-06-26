@@ -6,6 +6,7 @@ import (
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"log"
 	"net"
 	"net/http"
@@ -24,6 +25,8 @@ func main() {
 
 	s := grpc.NewServer()
 	server := house.NewServer()
+	// Register reflection service on gRPC server.
+	reflection.Register(s)
 	pb.RegisterHomeDetectorServer(s, server.(pb.HomeDetectorServer))
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(":2112", nil)
