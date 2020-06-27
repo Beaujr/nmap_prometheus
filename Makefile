@@ -65,6 +65,8 @@ go_fmt:
 		exit 1; \
 	fi
 
+docker-build-and-push: PUSH=true
+docker-build-and-push: TYPE=registry
 docker-build-and-push: BUILD_TAG=$(IMAGE_TAG)-$(APP_TYPE)-$(GIT_COMMIT)
 docker-build-and-push: | docker-login docker_build
 
@@ -77,7 +79,7 @@ docker_build:
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		--tag $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
-		--platform linux/amd64,linux/arm/v7 \
+		--platform linux/amd64,linux/arm/v7,linux/arm/v6 \
 		--output "type=$(TYPE),push=$(PUSH)" \
 		--file $(DOCKERFILES)/$(DOCKERFILE) \
 		./

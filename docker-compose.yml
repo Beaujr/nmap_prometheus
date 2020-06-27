@@ -13,4 +13,3 @@ services:
       - ./config:/config
     command: '-debug=true'
 
-
