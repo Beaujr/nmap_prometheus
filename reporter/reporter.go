@@ -28,7 +28,12 @@ func (r *Reporter) Address(items []pb.AddressRequest) error {
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
+		defer func() {
+			err = conn.Close()
+		}()
+		if err != nil {
+			return err
+		}
 		c := pb.NewHomeDetectorClient(conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
 		defer cancel()
@@ -54,7 +59,12 @@ func (r *Reporter) Bles(macs []*string) error {
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}
-		defer conn.Close()
+		defer func() {
+			err = conn.Close()
+		}()
+		if err != nil {
+			log.Fatalf("did not connect: %v", err)
+		}
 		c := pb.NewHomeDetectorClient(conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
 		defer cancel()
