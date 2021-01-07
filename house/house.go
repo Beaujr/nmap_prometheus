@@ -377,6 +377,7 @@ func (s *Server) returnToHouseManager(iotDevice *device) error {
 			}
 		}
 	}
+	return nil
 }
 
 func (s *Server) iotdeviceManager(iotDevice *device) error {
