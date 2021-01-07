@@ -14,6 +14,8 @@ jobs:
       id: buildx
       with:
         install: true
+    - name: Available platforms
+      run: echo ${{ steps.buildx.outputs.platforms }}
     - name: Docker Login
       run: make docker-login DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
     - name: Build the ARM Server Docker image
