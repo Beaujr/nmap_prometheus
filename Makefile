@@ -79,7 +79,7 @@ docker_build:
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		--tag $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
-		--platform linux/amd64 \
+		--platform linux/amd64,linux/arm/v7,linux/arm/v6,linux/arm64 \
 		--output "type=$(TYPE),push=$(PUSH)" \
 		--file $(DOCKERFILES)/$(DOCKERFILE) \
 		./
