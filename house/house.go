@@ -317,6 +317,23 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
+func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
+	newDevice := true
+	for _, houseDevice := range houseDevices {
+		if in.Mac == houseDevice.Id.Mac {
+			newDevice = false
+		}
+	}
+	if newDevice {
+		fakeAddressRequest := &pb.AddressRequest{Mac: in.Mac, Ip: in.Mac}
+		err := s.newDevice(fakeAddressRequest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &pb.Reply{Acknowledged: true}, nil
+}
+
 func (s *Server) httpHealthCheck(url string) bool {
 	req, _ := http.NewRequest("GET", url, nil)
 
