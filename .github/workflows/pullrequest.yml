@@ -20,7 +20,7 @@ jobs:
       run: echo ${{ steps.buildx.outputs.platforms }}
     - name: Docker Login
       run: make docker-login DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
-    - name: Build the ARM Server Docker image
-      run: make docker_build APP_TYPE=server BUILD_TAG=server-unstable
-    - name: Build the ARM Client Docker image
+    - name: Build the Client Docker image
       run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client BUILD_TAG=client-unstable
+    - name: Build the Server Docker image
+      run: make docker_build APP_TYPE=server BUILD_TAG=server-unstable
