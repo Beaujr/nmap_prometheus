@@ -230,7 +230,7 @@ func (s *Server) deviceDetectState(item device) int64 {
 	return lastSeen
 }
 
-func (s *Server) newDevice(in *pb.AddressRequest) error {
+func (s *Server) newDevice(in *pb.AddressRequest, ble bool) error {
 	name := in.Ip
 	if in.Mac != "" {
 		name = in.Mac
@@ -257,7 +257,9 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	if err != nil {
 		return err
 	}
-	s.registerMetric(newDevice)
+	if !ble {
+		s.registerMetric(newDevice)
+	}
 	return nil
 }
 
@@ -308,7 +310,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 		}
 	}
 	if newDevice {
-		err := s.newDevice(in)
+		err := s.newDevice(in, false)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +328,8 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 	}
 	if newDevice {
 		fakeAddressRequest := &pb.AddressRequest{Mac: in.Mac, Ip: in.Mac}
-		err := s.newDevice(fakeAddressRequest)
+		houseDevices = append(houseDevices)
+		err := s.newDevice(fakeAddressRequest, true)
 		if err != nil {
 			return nil, err
 		}

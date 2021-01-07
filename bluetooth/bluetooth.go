@@ -16,7 +16,7 @@ import (
 
 var (
 	device = flag.String("device", "default", "implementation of ble")
-	du     = flag.Duration("du", 10*time.Second, "scanning duration")
+	du     = flag.Duration("du", 0*time.Second, "scanning duration")
 	dup    = flag.Bool("dup", true, "allow duplicate reported")
 )
 
@@ -37,7 +37,6 @@ func Scan(reporter *reporter.Reporter) error {
 	// Scan for specified durantion, or until interrupted by user.
 	fmt.Printf("Scanning for %s...\n", *du)
 	ctx := ble.WithSigHandler(context.WithTimeout(context.Background(), *du))
-
 	chkErr(ble.Scan(ctx, *dup, bs.advHandler, nil))
 	return nil
 }

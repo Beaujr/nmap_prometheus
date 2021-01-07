@@ -29,10 +29,10 @@ func main() {
 		}
 	}
 
-	for *ble {
+	if *ble {
 		err := bluetooth.Scan(&c)
 		if err != nil {
-			log.Fatalf("unable to run ble scan: %v", err)
+			log.Printf("unable to run ble scan: %v", err)
 		}
 	}
 
