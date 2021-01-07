@@ -14,8 +14,6 @@ jobs:
       id: buildx
       with:
         install: true
-    - name: Run go report card on PR
-      run: make score GITOPS_API_KEY=${{ secrets.GITOPS_API_KEY }} GITHUB_USER=gogitops GITHUB_TOKEN=${{secrets.GITHUB_API_TOKEN}}
     - name: Build the Server Docker image
       run: make docker_build APP_TYPE=server
     - name: Build the Client Docker image
