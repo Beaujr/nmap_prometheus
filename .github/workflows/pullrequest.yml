@@ -10,12 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Set up Docker Buildx
-      id: master
-      uses: crazy-max/ghaction-docker-buildx@v1
+    - uses: docker/setup-buildx-action@v1
+      id: buildx
       with:
-        buildx-version: latest
-        qemu-version: latest
+        install: true
     - name: Run go report card on PR
       run: make score GITOPS_API_KEY=${{ secrets.GITOPS_API_KEY }} GITHUB_USER=gogitops GITHUB_TOKEN=${{secrets.GITHUB_API_TOKEN}}
     - name: Build the Server Docker image
