@@ -17,6 +17,6 @@ jobs:
     - name: Docker Login
       run: make docker-login DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
     - name: Build the ARM Server Docker image
-      run: make docker_build APP_TYPE=server PLATFORM=linux/arm/v7,linux/arm/v6 BUILD_TAG=arm-server
-    - name: Build the Client Docker image
-      run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client PLATFORM=linux/arm/v7,linux/arm/v6 BUILD_TAG=arm-client
+      run: make docker_build APP_TYPE=server PLATFORM=linux/arm/v6 BUILD_TAG=arm-server
+    - name: Build the ARM Client Docker image
+      run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client PLATFORM=linux/arm/v6 BUILD_TAG=arm-client
