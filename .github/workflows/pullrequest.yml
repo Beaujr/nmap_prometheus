@@ -21,6 +21,6 @@ jobs:
     - name: Docker Login
       run: make docker-login DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
     - name: Build the ARM Server Docker image
-      run: make docker_build APP_TYPE=server PLATFORM=linux/arm/v6 BUILD_TAG=arm-server
+      run: make docker_build APP_TYPE=server BUILD_TAG=server-unstable
     - name: Build the ARM Client Docker image
-      run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client PLATFORM=linux/arm/v6 BUILD_TAG=arm-client
+      run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client BUILD_TAG=client-unstable

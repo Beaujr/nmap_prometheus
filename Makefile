@@ -9,7 +9,7 @@ BUILD_TAG := build-$(APP_TYPE)
 BINPATH := ../bin
 NAMESPACE := default
 PORT := 1234
-# PLATFORM := linux/amd64,linux/arm/v7,linux/arm/v6,linux/arm64
+PLATFORM := linux/amd64,linux/arm/v7,linux/arm/v6,linux/arm64
 
 # Path to dockerfiles directory
 DOCKERFILES := build
