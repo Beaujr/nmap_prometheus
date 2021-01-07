@@ -17,20 +17,20 @@ var (
 func main() {
 	log.Println("Application Starting")
 	flag.Parse()
+	c := reporter.NewReporter(*address)
 	for !*ble {
 		addresses, err := network.Scan(*subnet)
 		if err != nil {
 			log.Fatalf("unable to run nmap scan: %v", err)
 		}
-		c := reporter.NewReporter(*address)
 		err = c.Address(addresses)
 		if err != nil {
 			log.Panic(err)
 		}
 	}
 
-	if *ble {
-		err := bluetooth.Scan()
+	for *ble {
+		err := bluetooth.Scan(&c)
 		if err != nil {
 			log.Fatalf("unable to run ble scan: %v", err)
 		}

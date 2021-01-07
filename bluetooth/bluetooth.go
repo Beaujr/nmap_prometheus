@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	pb "github.com/beaujr/nmap_prometheus/proto"
+	reporter "github.com/beaujr/nmap_prometheus/reporter"
 	"log"
 	"time"
 
@@ -18,39 +20,55 @@ var (
 	dup    = flag.Bool("dup", true, "allow duplicate reported")
 )
 
-func Scan() error {
+type BleScanner interface {
+	report([]pb.AddressRequest, error)
+}
+type beaconScanner struct {
+	*reporter.Reporter
+}
+
+func Scan(reporter *reporter.Reporter) error {
 	d, err := dev.NewDevice(*device)
 	if err != nil {
 		return err
 	}
 	ble.SetDefaultDevice(d)
-
+	bs := beaconScanner{reporter}
 	// Scan for specified durantion, or until interrupted by user.
 	fmt.Printf("Scanning for %s...\n", *du)
 	ctx := ble.WithSigHandler(context.WithTimeout(context.Background(), *du))
-	chkErr(ble.Scan(ctx, *dup, advHandler, nil))
+
+	chkErr(ble.Scan(ctx, *dup, bs.advHandler, nil))
 	return nil
 }
 
-func advHandler(a ble.Advertisement) {
-	if a.Connectable() {
-		fmt.Printf("[%s] C %3d:", a.Addr(), a.RSSI())
-	} else {
-		fmt.Printf("[%s] N %3d:", a.Addr(), a.RSSI())
+func (b *beaconScanner) advHandler(a ble.Advertisement) {
+	addresses := make([]*string, 0)
+	mac := a.Addr().String()
+	log.Printf("mac: %s", mac)
+	addresses = append(addresses, &mac)
+	err := b.Reporter.Bles(addresses)
+	if err != nil {
+		log.Panic(err)
 	}
-	comma := ""
-	if len(a.LocalName()) > 0 {
-		fmt.Printf(" Name: %s", a.LocalName())
-		comma = ","
-	}
-	if len(a.Services()) > 0 {
-		fmt.Printf("%s Svcs: %v", comma, a.Services())
-		comma = ","
-	}
-	if len(a.ManufacturerData()) > 0 {
-		fmt.Printf("%s MD: %X", comma, a.ManufacturerData())
-	}
-	fmt.Printf("\n")
+	//if a.Connectable() {
+	//	fmt.Printf("[%s] C %3d:", a.Addr(), a.RSSI())
+	//} else {
+	//	fmt.Printf("[%s] N %3d:", a.Addr(), a.RSSI())
+	//}
+	//comma := ""
+	//if len(a.LocalName()) > 0 {
+	//	fmt.Printf(" Name: %s", a.LocalName())
+	//	comma = ","
+	//}
+	//if len(a.Services()) > 0 {
+	//	fmt.Printf("%s Svcs: %v", comma, a.Services())
+	//	comma = ","
+	//}
+	//if len(a.ManufacturerData()) > 0 {
+	//	fmt.Printf("%s MD: %X", comma, a.ManufacturerData())
+	//}
+	//fmt.Printf("\n")
 }
 
 func chkErr(err error) {
