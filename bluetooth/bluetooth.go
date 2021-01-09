@@ -44,7 +44,6 @@ func Scan(reporter *reporter.Reporter) error {
 func (b *beaconScanner) advHandler(a ble.Advertisement) {
 	addresses := make([]*string, 0)
 	mac := a.Addr().String()
-	log.Printf("mac: %s", mac)
 	addresses = append(addresses, &mac)
 	err := b.Reporter.Bles(addresses)
 	if err != nil {

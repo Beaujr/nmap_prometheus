@@ -406,10 +406,9 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 					}
 				}
 			}
-
 		}
 	}
-	return &pb.Reply{Acknowledged: true}, nil
+	return &pb.Reply{Acknowledged: !newDevice}, nil
 }
 
 func (s *Server) httpHealthCheck(url string) bool {

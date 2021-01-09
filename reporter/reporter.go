@@ -54,7 +54,6 @@ func (r *Reporter) Address(items []pb.AddressRequest) error {
 // Bles is for handling Bluetooth Mac addresses
 func (r *Reporter) Bles(macs []*string) error {
 	for _, mac := range macs {
-		fmt.Println(*mac)
 		conn, err := grpc.Dial(r.address, grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
@@ -72,7 +71,9 @@ func (r *Reporter) Bles(macs []*string) error {
 		if err != nil {
 			return err
 		}
-		log.Println(response.Acknowledged)
+		if response.Acknowledged {
+			log.Printf("%s, %v", *mac, response.Acknowledged)
+		}
 	}
 	return nil
 }
