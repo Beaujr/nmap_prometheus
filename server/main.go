@@ -29,6 +29,8 @@ func main() {
 	reflection.Register(s)
 	pb.RegisterHomeDetectorServer(s, server.(pb.HomeDetectorServer))
 	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/devices", server.Devices)
+	http.HandleFunc("/people", server.People)
 	go http.ListenAndServe(":2112", nil)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

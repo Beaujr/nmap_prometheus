@@ -9,6 +9,7 @@ BUILD_TAG := build-$(APP_TYPE)
 BINPATH := ../bin
 NAMESPACE := default
 PORT := 1234
+PLATFORM := linux/amd64,linux/arm/v7,linux/arm/v6,linux/arm64
 
 # Path to dockerfiles directory
 DOCKERFILES := build
@@ -71,7 +72,7 @@ docker-build-and-push: BUILD_TAG=$(IMAGE_TAG)-$(APP_TYPE)-$(GIT_COMMIT)
 docker-build-and-push: | docker-login docker_build
 
 docker_build: DOCKERFILE=Dockerfile
-docker_build: PUSH=false
+docker_build: PUSH=true
 docker_build: TYPE=image
 docker_build:
 	docker buildx build \
@@ -79,7 +80,7 @@ docker_build:
 		--build-arg APP_TYPE=$(APP_TYPE) \
 		--build-arg APP_NAME=$(REPO_NAME) \
 		--tag $(REGISTRY)/$(APP_NAME):$(BUILD_TAG) \
-		--platform linux/amd64,linux/arm/v7,linux/arm/v6 \
+		--platform $(PLATFORM) \
 		--output "type=$(TYPE),push=$(PUSH)" \
 		--file $(DOCKERFILES)/$(DOCKERFILE) \
 		./

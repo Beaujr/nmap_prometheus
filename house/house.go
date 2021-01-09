@@ -2,6 +2,7 @@ package house
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/assistant"
@@ -10,36 +11,30 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 type networkId struct {
-	Ip  string `json:"ip",yaml:"ip"`
-	Mac string `json:"mac",yaml:"mac"`
-}
-
-type device struct {
-	Id       networkId `json:"id",yaml:"id"`
-	LastSeen int64     `json:"lastSeen",yaml:"lastSeen"`
-	Away     bool      `json:"away",yaml:"away"`
-	Name     string    `json:"name",yaml:"name"`
-	Person   bool      `json:"person",yaml:"person"`
-	Command  string    `json:"command",yaml:"command"`
-	Smart    bool      `json:"smart",yaml:"smart"`
+	Ip   string `json:"ip",yaml:"ip"`
+	Mac  string `json:"mac",yaml:"mac"`
+	UUID string `json:"uuid",yaml:"uuid"`
 }
 
 //IOT iotDevices
 var timeAwaySeconds = flag.Int64("timeout", 300, "")
+var networkConfigFile = flag.String("config", "config/devices.yaml", "Path to config file")
+var bleConfigFile = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
 var houseDevices = []*device{}
 var iotDevices = []*device{}
+var bleDevices = []*bleDevice{}
+var commandQueue = []*TimedCommand{}
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
+var gHouseEmpty = false
 var debug = flag.Bool("debug", false, "Debug mode")
 
 var (
@@ -52,14 +47,16 @@ var (
 // HomeManager manages devices and metric collection
 type HomeManager interface {
 	adjustLights(lightGroup string, brightness string) error
-	deviceDetectState(phone device) int64
+	deviceDetectState(phone int64) int64
 	deviceManager() error
 	isDeviceOn(iot *device) (bool, error)
 	isHouseEmpty() bool
 	httpHealthCheck(url string) bool
-	iotdeviceManager(iotDevice *device) error
+	iotdeviceManager(iotDevice *device, empty bool) error
 	iotStatusManager() error
 	recordMetrics()
+	Devices(w http.ResponseWriter, req *http.Request)
+	People(w http.ResponseWriter, req *http.Request)
 }
 
 // Server is an implementation of the proto HomeDetectorServer
@@ -67,35 +64,8 @@ type Server struct {
 	pb.UnimplementedHomeDetectorServer
 }
 
-func readConfig(filename string) ([]*device, error) {
-	// Open our yamlFile
-	yamlFile, err := os.Open(filename)
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		fmt.Println(err)
-	}
-	log.Println(fmt.Sprintf("Successfully Opened: %s", filename))
-	defer yamlFile.Close()
-
-	byteValue, err := ioutil.ReadAll(yamlFile)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []*device
-	err = yaml.Unmarshal(byteValue, &result)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func writeConfig(filename string) error {
-	d1, err := yaml.Marshal(append(houseDevices, iotDevices...))
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile(filename, d1, 0644)
+func writeConfig(data []byte, filename string) error {
+	err := ioutil.WriteFile(filename, data, 0644)
 	if err != nil {
 		return err
 	}
@@ -105,7 +75,11 @@ func writeConfig(filename string) error {
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	server := &Server{}
-	allDevices, err := readConfig("config/devices.yaml")
+	cfgDevices, err := readNetworkConfig(*networkConfigFile)
+	if err != nil {
+		log.Println(err)
+	}
+	allDevices, err := uniqueNetwork(cfgDevices)
 	if err != nil {
 		log.Println(err)
 	}
@@ -116,6 +90,17 @@ func NewServer() HomeManager {
 		}
 		houseDevices = append(houseDevices, item)
 	}
+
+	// Bluetooth
+	savedBle, err := readBleConfig(*bleConfigFile)
+	bleDevices = savedBle
+	if err != nil {
+		log.Println(err)
+	}
+	//bleDevices, err = uniqueBle(cfgBleDevices)
+	//if err != nil {
+	//	log.Println(err)
+	//}
 
 	c := cron.New(cron.WithSeconds())
 	c.AddFunc("*/10 * * * * *", func() {
@@ -131,6 +116,29 @@ func NewServer() HomeManager {
 			log.Println(err)
 		}
 	})
+	//commandQueue = append(commandQueue, &TimedCommand{
+	//	Command:   "turn christmas tree off",
+	//	ExecuteAt: 0,
+	//})
+	c.AddFunc("*/10 * * * * *", func() {
+		for _, tc := range commandQueue {
+			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
+				tc.Executed = true
+				if !*debug {
+					_, err := server.callAssistant(tc.Command)
+					if err != nil {
+						log.Println(err)
+					}
+					err = notifications.SendNotification("Scheduled Task", tc.Command)
+					if err != nil {
+						log.Println(err)
+					}
+				} else {
+					log.Printf("Scheduled Task: %s", tc.Command)
+				}
+			}
+		}
+	})
 
 	metrics = make(map[string]prometheus.Gauge)
 	for _, item := range append(iotDevices, houseDevices...) {
@@ -141,6 +149,38 @@ func NewServer() HomeManager {
 	c.Start()
 	server.recordMetrics()
 	return server
+}
+
+// Devices API endpoint to determine devices status
+func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
+	js, err := json.Marshal(append(iotDevices, houseDevices...))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+	return
+}
+
+// People API endpoint to determine person device status
+func (s *Server) People(w http.ResponseWriter, req *http.Request) {
+	people := make([]*device, 0)
+	for _, device := range houseDevices {
+		if device.Person {
+			people = append(people, device)
+		}
+	}
+	js, err := json.Marshal(people)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+	return
 }
 
 func (s *Server) registerMetric(item device) {
@@ -208,9 +248,27 @@ func (s *Server) callAssistant(command string) (*string, error) {
 	return assistant.Call(command)
 }
 
-func (s *Server) deviceDetectState(item device) int64 {
-	lastSeen := int64(time.Now().Unix()) - item.LastSeen
+func (s *Server) deviceDetectState(deviceLastSeen int64) int64 {
+	now := int64(time.Now().Unix())
+	lastSeen := now - deviceLastSeen
 	return lastSeen
+}
+
+func (s *Server) newBleDevice(in *pb.BleRequest) error {
+	newDevice := bleDevice{
+		Id:       in.Mac,
+		LastSeen: int64(time.Now().Unix()),
+		Commands: make([]command, 0),
+	}
+
+	log.Println(fmt.Printf("New BLE Device: %s", in.Mac))
+
+	bleDevices = append(bleDevices, &newDevice)
+	_, err := uniqueBle(bleDevices)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) newDevice(in *pb.AddressRequest) error {
@@ -220,7 +278,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	}
 	newDevice := device{
 		Name:     strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
-		Id:       networkId{Ip: in.Ip, Mac: in.Mac},
+		Id:       networkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
 		Away:     false,
 		LastSeen: int64(time.Now().Unix()),
 		Person:   false,
@@ -236,7 +294,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	}
 
 	houseDevices = append(houseDevices, &newDevice)
-	err := writeConfig("config/devices.yaml")
+	_, err := uniqueNetwork(houseDevices)
 	if err != nil {
 		return err
 	}
@@ -245,16 +303,24 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 }
 
 func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest) error {
-	if incoming.Ip != "" {
+	if incoming.Ip != "" && incoming.Ip != houseDevice.Id.Ip {
 		houseDevice.Id.Ip = incoming.Ip
+		err := writeNetworkDevices(houseDevices)
+		if err != nil {
+			log.Printf("Error updating: %s", houseDevice.Id.UUID)
+		}
 	}
 
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
 	}
 
-	log.Println(houseDevice.Name)
-	timeAway := s.deviceDetectState(*houseDevice)
+	if incoming.Mac == "" && incoming.Ip == houseDevice.Id.UUID {
+		houseDevice.Id.Ip = incoming.Ip
+	}
+
+	//log.Println(houseDevice.Name)
+	timeAway := s.deviceDetectState(houseDevice.LastSeen)
 	if timeAway > *timeAwaySeconds && houseDevice.Person {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
 		if *debug {
@@ -265,7 +331,6 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 				return err
 			}
 		}
-
 	}
 	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
@@ -277,25 +342,76 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	incoming := in
 	newDevice := true
 	for _, houseDevice := range houseDevices {
-		if houseDevice.Id.Ip == incoming.Ip && houseDevice.Id.Mac == incoming.Mac ||
-			houseDevice.Id.Mac == incoming.Mac && incoming.Mac != "" ||
-			houseDevice.Id.Ip == incoming.Ip && incoming.Mac == "" ||
-			houseDevice.Id.Ip != incoming.Ip && incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac ||
-			houseDevice.Id.Ip == incoming.Ip && incoming.Ip != "" && incoming.Mac != houseDevice.Id.Mac {
+		if houseDevice.Id.UUID == incoming.Mac ||
+			houseDevice.Id.UUID == incoming.Ip {
+			//if houseDevice.Id.Ip == incoming.Ip && houseDevice.Id.Mac == incoming.Mac ||
+			//	houseDevice.Id.Mac == incoming.Mac && incoming.Mac != "" ||
+			//	houseDevice.Id.Ip == incoming.Ip && incoming.Mac == "" ||
+			//	houseDevice.Id.Ip != incoming.Ip && incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac ||
+			//	houseDevice.Id.Ip == incoming.Ip && incoming.Ip != "" && incoming.Mac != houseDevice.Id.Mac {
 			newDevice = false
 			err := s.existingDevice(houseDevice, incoming)
 			if err != nil {
 				return nil, err
 			}
+			s.iotStatusManager()
+
 		}
 	}
+
 	if newDevice {
 		err := s.newDevice(in)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	return &pb.Reply{Acknowledged: true}, nil
+}
+
+// Ack for bluetooth reported MAC addresses
+func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
+	newDevice := true
+	device := &bleDevice{}
+	for _, houseDevice := range bleDevices {
+		if in.Mac == houseDevice.Id {
+			newDevice = false
+			device = houseDevice
+		}
+	}
+	if !newDevice {
+		lastSeen := s.deviceDetectState(device.LastSeen)
+		device.LastSeen = int64(time.Now().Unix())
+		err := writeBleDevices(bleDevices)
+		if err != nil {
+			log.Printf("Error updating BLE device: %s", device.Id)
+		}
+		if lastSeen > *timeAwaySeconds {
+			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
+			for _, command := range device.Commands {
+				if command.Timeout > 0 {
+					// Create a queue
+					commandQueue = append(commandQueue, &TimedCommand{
+						Command:   command.TimeoutCommand,
+						ExecuteAt: int64(time.Now().Unix()) + command.Timeout,
+						Executed:  false,
+					})
+					fmt.Println(&commandQueue)
+				}
+				if !*debug {
+					_, err := s.callAssistant(command.Command)
+					if err != nil {
+						log.Println(err)
+					}
+					err = notifications.SendNotification(device.Name, command.Command)
+					if err != nil {
+						log.Println(err)
+					}
+				}
+			}
+		}
+	}
+	return &pb.Reply{Acknowledged: !newDevice}, nil
 }
 
 func (s *Server) httpHealthCheck(url string) bool {
@@ -311,7 +427,7 @@ func (s *Server) httpHealthCheck(url string) bool {
 }
 
 func (s *Server) isDeviceOn(iot *device) (bool, error) {
-	lastSeen := s.deviceDetectState(*iot)
+	lastSeen := s.deviceDetectState(iot.LastSeen)
 	if lastSeen > int64(syncStatusWithGA) {
 		state, err := s.callAssistant(iot.Command)
 		if err != nil {
@@ -335,22 +451,39 @@ func (s *Server) isHouseEmpty() bool {
 }
 
 func (s *Server) iotStatusManager() error {
+	houseEmpty := s.isHouseEmpty()
+	if gHouseEmpty == houseEmpty {
+		return nil
+	}
 	for _, device := range iotDevices {
-		err := s.iotdeviceManager(device)
+		err := s.iotdeviceManager(device, gHouseEmpty)
 		if err != nil {
 			return err
+		}
+
+	}
+	return nil
+}
+
+func (s *Server) returnToHouseManager(iotDevice *device) error {
+	houseEmpty := s.isHouseEmpty()
+	if gHouseEmpty != houseEmpty {
+		// the house isnt empty but it was until this device returned
+		if !houseEmpty {
+			gHouseEmpty = houseEmpty
+			command := fmt.Sprintf("%s returned home", iotDevice.Name)
+			err := notifications.SendNotification("House no longer Empty", command)
+			if err != nil {
+				return nil
+			}
 		}
 	}
 	return nil
 }
 
-func (s *Server) iotdeviceManager(iotDevice *device) error {
-	houseEmpty := s.isHouseEmpty()
-	on, err := s.isDeviceOn(iotDevice)
-	if err != nil {
-		return err
-	}
-	if houseEmpty && on {
+func (s *Server) iotdeviceManager(iotDevice *device, houseEmpty bool) error {
+	if houseEmpty && iotDevice.PresenceAware {
+		gHouseEmpty = houseEmpty
 		command := fmt.Sprintf("Turning %s off", iotDevice.Name)
 		log.Println(command)
 		if !*debug {
@@ -358,10 +491,10 @@ func (s *Server) iotdeviceManager(iotDevice *device) error {
 			if err != nil {
 				return nil
 			}
-		}
-		_, err := s.callAssistant(fmt.Sprintf("turn %s off", iotDevice.Name))
-		if err != nil {
-			return err
+			_, err = s.callAssistant(fmt.Sprintf("turn %s off", iotDevice.Name))
+			if err != nil {
+				return err
+			}
 		}
 		iotDevice.Away = true
 	}
@@ -370,15 +503,25 @@ func (s *Server) iotdeviceManager(iotDevice *device) error {
 
 func (s *Server) deviceManager() error {
 	for _, device := range houseDevices {
-		timeAway := s.deviceDetectState(*device)
+		//log.Println(device.Name)
+		timeAway := s.deviceDetectState(device.LastSeen)
 		if timeAway > *timeAwaySeconds && !device.Away {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
 			if device.Person {
-				err := notifications.SendNotification(device.Name, "Has left the house")
+				err := s.iotStatusManager()
 				if err != nil {
 					return nil
 				}
+				if !*debug {
+					err := notifications.SendNotification(device.Name, "Has left the house")
+					if err != nil {
+						return nil
+					}
+				} else {
+					log.Printf("Notification: %s: %s", device.Name, "Has left the house")
+				}
+
 			}
 		}
 	}
