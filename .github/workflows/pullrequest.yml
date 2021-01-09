@@ -21,6 +21,6 @@ jobs:
     - name: Docker Login
       run: make docker-login DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
     - name: Build the Client Docker image
-      run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client BUILD_TAG=client-unstable
+      run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client BUILD_TAG=client-unstable PUSH=false
     - name: Build the Server Docker image
-      run: make docker_build APP_TYPE=server BUILD_TAG=server-unstable
+      run: make docker_build APP_TYPE=server BUILD_TAG=server-unstable PUSH=false
