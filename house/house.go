@@ -52,7 +52,7 @@ type HomeManager interface {
 	isDeviceOn(iot *device) (bool, error)
 	isHouseEmpty() bool
 	httpHealthCheck(url string) bool
-	iotdeviceManager(iotDevice *device) error
+	iotdeviceManager(iotDevice *device, empty bool) error
 	iotStatusManager() error
 	recordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
