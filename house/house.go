@@ -520,7 +520,6 @@ func (s *Server) deviceManager() error {
 					log.Printf("Notification: %s: %s", device.Name, "Has left the house")
 				}
 
-
 			}
 		}
 	}

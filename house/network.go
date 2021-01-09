@@ -43,7 +43,6 @@ func writeNetworkDevices(devices []*device) error {
 	return writeConfig(d1, *networkConfigFile)
 }
 
-
 func readNetworkConfig(filename string) ([]*device, error) {
 	// Open our yamlFile
 	yamlFile, err := os.Open(filename)

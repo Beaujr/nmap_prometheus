@@ -9,22 +9,22 @@ import (
 )
 
 type bleDevice struct {
-	Id       string `json:"id",yaml:"id"`
-	LastSeen int64  `json:"lastSeen",yaml:"lastSeen"`
-	Commands  []command `json:"commands",yaml:"commands"`
-	Name  string `json:"name",yaml:"name"`
+	Id       string    `json:"id",yaml:"id"`
+	LastSeen int64     `json:"lastSeen",yaml:"lastSeen"`
+	Commands []command `json:"commands",yaml:"commands"`
+	Name     string    `json:"name",yaml:"name"`
 }
 
 type command struct {
-	Timeout int64 `json:"timeout",yaml:"timeout"`
-	Command string `json:"command",yaml:"command"`
+	Timeout        int64  `json:"timeout",yaml:"timeout"`
+	Command        string `json:"command",yaml:"command"`
 	TimeoutCommand string `json:"timeoutcommand",yaml:"timeoutcommand"`
 }
 
 type TimedCommand struct {
-	Command string `json:"command",yaml:"command"`
-	ExecuteAt int64 `json:"executeat",yaml:"executeat"`
-	Executed bool `json:"executed",yaml:"executed"`
+	Command   string `json:"command",yaml:"command"`
+	ExecuteAt int64  `json:"executeat",yaml:"executeat"`
+	Executed  bool   `json:"executed",yaml:"executed"`
 }
 
 func writeBleDevices(devices []*bleDevice) error {
