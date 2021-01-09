@@ -20,6 +20,7 @@ var (
 	dup    = flag.Bool("dup", true, "allow duplicate reported")
 )
 
+// BleScanner Interface for BleScanner structs for BLE/BL
 type BleScanner interface {
 	report([]pb.AddressRequest, error)
 }
@@ -27,6 +28,7 @@ type beaconScanner struct {
 	*reporter.Reporter
 }
 
+// Scan inits the HCI bluetooth and reports to the GRPC Server
 func Scan(reporter *reporter.Reporter) error {
 	d, err := dev.NewDevice(*device)
 	if err != nil {

@@ -21,6 +21,7 @@ type command struct {
 	TimeoutCommand string `json:"timeoutcommand",yaml:"timeoutcommand"`
 }
 
+// TimedCommand executes a command now and a reverse command in now + executeat seconds
 type TimedCommand struct {
 	Command   string `json:"command",yaml:"command"`
 	ExecuteAt int64  `json:"executeat",yaml:"executeat"`

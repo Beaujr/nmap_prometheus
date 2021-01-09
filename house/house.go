@@ -151,6 +151,7 @@ func NewServer() HomeManager {
 	return server
 }
 
+// Devices API endpoint to determine devices status
 func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 	js, err := json.Marshal(append(iotDevices, houseDevices...))
 	if err != nil {
@@ -163,6 +164,7 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
+// People API endpoint to determine person device status
 func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 	people := make([]*device, 0)
 	for _, device := range houseDevices {
@@ -367,6 +369,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
+// Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
 	newDevice := true
 	device := &bleDevice{}
