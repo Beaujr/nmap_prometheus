@@ -283,6 +283,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		LastSeen: int64(time.Now().Unix()),
 		Person:   false,
 		Command:  "",
+		Home:     in.Home,
 	}
 
 	log.Println(fmt.Printf("New Device: %s", name))
