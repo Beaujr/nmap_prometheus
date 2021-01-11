@@ -288,7 +288,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 
 	log.Println(fmt.Printf("New Device: %s", name))
 	if !*debug {
-		err := notifications.SendNotification(newDevice.Name, "New Device")
+		err := notifications.SendNotification(newDevice.Name, fmt.Sprintf("New Device in %", newDevice.Home))
 		if err != nil {
 			return err
 		}
