@@ -115,3 +115,6 @@ score:
 	https://gogitops.beau.cf/submit/$(GITHUB_REPOSITORY)/pull/$(PR_ID) \
 	-H 'user: $(GITHUB_USER)' \
 	-H 'token: $(GITHUB_TOKEN)'
+
+proto:
+	protoc --proto_path=proto --go_out=proto/ --go-grpc_out=proto/ proto/DeviceDetector.proto
