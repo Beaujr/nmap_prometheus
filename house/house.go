@@ -302,7 +302,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 
 	log.Println(fmt.Printf("New Device: %s", name))
 	if !*debug {
-		err := notifications.SendNotification(fmt.Sprintf("New Device in %", newDevice.Home), newDevice.Manufacturer)
+		err := notifications.SendNotification(fmt.Sprintf("New Device in %s", newDevice.Home), newDevice.Manufacturer)
 		if err != nil {
 			return err
 		}
