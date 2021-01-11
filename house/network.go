@@ -17,6 +17,7 @@ type device struct {
 	Person             bool      `json:"person",yaml:"person"`
 	Command            string    `json:"command",yaml:"command"`
 	Smart              bool      `json:"smart",yaml:"smart"`
+	Manufacturer       string    `json:"manufacturer",yaml:"manufacturer"`
 	SmartStatusCommand string    `json:"gaStatusCmd,omitempty",yaml:"gaStatusCmd,omitempty"`
 	PresenceAware      bool      `json:"aware,omitempty",yaml:"aware,omitempty"`
 }

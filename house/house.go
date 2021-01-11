@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/assistant"
+	"github.com/beaujr/nmap_prometheus/macvendor"
 	"github.com/beaujr/nmap_prometheus/notifications"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/prometheus/client_golang/prometheus"
@@ -282,26 +283,33 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	if in.Mac != "" {
 		name = in.Mac
 	}
+
+	vendor, err := macvendor.GetManufacturer(in.Mac)
+	if err != nil {
+		log.Printf(err.Error())
+		vendor = &name
+	}
 	newDevice := device{
-		Name:     strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
-		Id:       networkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
-		Away:     false,
-		LastSeen: int64(time.Now().Unix()),
-		Person:   false,
-		Command:  "",
-		Home:     in.Home,
+		Name:         strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
+		Id:           networkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
+		Away:         false,
+		LastSeen:     int64(time.Now().Unix()),
+		Person:       false,
+		Command:      "",
+		Manufacturer: *vendor,
+		Home:         in.Home,
 	}
 
 	log.Println(fmt.Printf("New Device: %s", name))
 	if !*debug {
-		err := notifications.SendNotification(newDevice.Name, fmt.Sprintf("New Device in %", newDevice.Home))
+		err := notifications.SendNotification(fmt.Sprintf("New Device in %", newDevice.Home), newDevice.Manufacturer)
 		if err != nil {
 			return err
 		}
 	}
 
 	houseDevices = append(houseDevices, &newDevice)
-	_, err := uniqueNetwork(houseDevices)
+	_, err = uniqueNetwork(houseDevices)
 	if err != nil {
 		return err
 	}
@@ -352,11 +360,11 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	}
 
 	if _, value := knowDevices[in.Mac]; !value {
+		knowDevices[in.Mac] = in.Home
 		err := s.newDevice(in)
 		if err != nil {
 			return nil, err
 		}
-		knowDevices[in.Mac] = in.Home
 	} else {
 		for _, houseDevice := range houseDevices {
 			if incoming.Mac == houseDevice.Id.Mac && incoming.Mac != "" {
