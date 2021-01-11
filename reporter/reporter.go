@@ -14,11 +14,12 @@ import (
 // Reporter is the struct to handle GRP Comms
 type Reporter struct {
 	address string
+	home    string
 }
 
 // NewReporter returns a Reporter for gRPC
-func NewReporter(address string) Reporter {
-	return Reporter{address: address}
+func NewReporter(address string, home string) Reporter {
+	return Reporter{address: address, home: home}
 }
 
 // Address reports pb.AddressRequest to the GRPC server
@@ -37,6 +38,7 @@ func (r *Reporter) Address(items []pb.AddressRequest) error {
 		c := pb.NewHomeDetectorClient(conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
 		defer cancel()
+		item.Home = r.home
 		response, err := c.Address(ctx, &item)
 		if err != nil {
 			grpcError := status.FromContextError(err)
@@ -67,7 +69,7 @@ func (r *Reporter) Bles(macs []*string) error {
 		c := pb.NewHomeDetectorClient(conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
 		defer cancel()
-		response, err := c.Ack(ctx, &pb.BleRequest{Mac: *mac})
+		response, err := c.Ack(ctx, &pb.BleRequest{Mac: *mac, Home: r.home})
 		if err != nil {
 			return err
 		}

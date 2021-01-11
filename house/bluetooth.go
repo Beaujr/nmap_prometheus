@@ -13,6 +13,7 @@ type bleDevice struct {
 	LastSeen int64     `json:"lastSeen",yaml:"lastSeen"`
 	Commands []command `json:"commands",yaml:"commands"`
 	Name     string    `json:"name",yaml:"name"`
+	Home     string    `json:"home",yaml:"home"`
 }
 
 type command struct {

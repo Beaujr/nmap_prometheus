@@ -342,8 +342,8 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	incoming := in
 	newDevice := true
 	for _, houseDevice := range houseDevices {
-		if houseDevice.Id.UUID == incoming.Mac ||
-			houseDevice.Id.UUID == incoming.Ip {
+		if (houseDevice.Id.UUID == incoming.Mac ||
+			houseDevice.Id.UUID == incoming.Ip) && incoming.Home == houseDevice.Home {
 			//if houseDevice.Id.Ip == incoming.Ip && houseDevice.Id.Mac == incoming.Mac ||
 			//	houseDevice.Id.Mac == incoming.Mac && incoming.Mac != "" ||
 			//	houseDevice.Id.Ip == incoming.Ip && incoming.Mac == "" ||
