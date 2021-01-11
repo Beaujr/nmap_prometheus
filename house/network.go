@@ -10,6 +10,7 @@ import (
 
 type device struct {
 	Id                 networkId `json:"id",yaml:"id"`
+	Home               string    `json:"home",yaml:"home"`
 	LastSeen           int64     `json:"lastSeen",yaml:"lastSeen"`
 	Away               bool      `json:"away",yaml:"away"`
 	Name               string    `json:"name",yaml:"name"`
