@@ -25,8 +25,8 @@ func uniqueNetwork(devices []*device) ([]*device, error) {
 	keys := make(map[string]bool)
 	list := []*device{}
 	for _, entry := range devices {
-		if _, value := keys[entry.Name]; !value {
-			keys[entry.Name] = true
+		if _, value := keys[entry.Id.Mac]; !value {
+			keys[entry.Id.Mac] = true
 			list = append(list, entry)
 		}
 	}

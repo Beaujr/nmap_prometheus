@@ -32,6 +32,7 @@ var houseDevices = []*device{}
 var iotDevices = []*device{}
 var bleDevices = []*bleDevice{}
 var commandQueue = []*TimedCommand{}
+var knowDevices map[string]string
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
 var gHouseEmpty = false
@@ -83,7 +84,12 @@ func NewServer() HomeManager {
 	if err != nil {
 		log.Println(err)
 	}
+
+	knowDevices = make(map[string]string)
 	for _, item := range allDevices {
+		if _, value := knowDevices[item.Id.Mac]; !value {
+			knowDevices[item.Id.Mac] = item.Home
+		}
 		if item.Smart {
 			iotDevices = append(iotDevices, item)
 			continue
@@ -341,29 +347,25 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
-	newDevice := true
-	for _, houseDevice := range houseDevices {
-		if (houseDevice.Id.UUID == incoming.Mac ||
-			houseDevice.Id.UUID == incoming.Ip) && incoming.Home == houseDevice.Home {
-			//if houseDevice.Id.Ip == incoming.Ip && houseDevice.Id.Mac == incoming.Mac ||
-			//	houseDevice.Id.Mac == incoming.Mac && incoming.Mac != "" ||
-			//	houseDevice.Id.Ip == incoming.Ip && incoming.Mac == "" ||
-			//	houseDevice.Id.Ip != incoming.Ip && incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac ||
-			//	houseDevice.Id.Ip == incoming.Ip && incoming.Ip != "" && incoming.Mac != houseDevice.Id.Mac {
-			newDevice = false
-			err := s.existingDevice(houseDevice, incoming)
-			if err != nil {
-				return nil, err
-			}
-			s.iotStatusManager()
-
-		}
+	if incoming.Mac == "" {
+		return &pb.Reply{Acknowledged: false}, nil
 	}
 
-	if newDevice {
+	if _, value := knowDevices[in.Mac]; !value {
 		err := s.newDevice(in)
 		if err != nil {
 			return nil, err
+		}
+		knowDevices[in.Mac] = in.Home
+	} else {
+		for _, houseDevice := range houseDevices {
+			if incoming.Mac == houseDevice.Id.Mac && incoming.Mac != "" {
+				err := s.existingDevice(houseDevice, incoming)
+				if err != nil {
+					return nil, err
+				}
+				s.iotStatusManager()
+			}
 		}
 	}
 
