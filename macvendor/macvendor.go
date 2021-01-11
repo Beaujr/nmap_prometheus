@@ -20,7 +20,7 @@ func GetManufacturer(mac string) (*string, error) {
 
 	defer res.Body.Close()
 	if res.StatusCode == 429 {
-		return GetManufacturer(mac)
+		return nil, fmt.Errorf("MacVendors time out: %s", mac)
 	}
 
 	body, err := ioutil.ReadAll(res.Body)

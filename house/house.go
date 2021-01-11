@@ -334,14 +334,13 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 		houseDevice.Id.Ip = incoming.Ip
 	}
 
-	//log.Println(houseDevice.Name)
 	timeAway := s.deviceDetectState(houseDevice.LastSeen)
 	if timeAway > *timeAwaySeconds && houseDevice.Person {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
 		if *debug {
 			log.Printf("Notification: %s, %s", houseDevice.Name, "is home")
 		} else {
-			err := notifications.SendNotification(houseDevice.Name, "has returned home.")
+			err := notifications.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home))
 			if err != nil {
 				return err
 			}
