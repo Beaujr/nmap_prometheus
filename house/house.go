@@ -30,8 +30,6 @@ var timeAwaySeconds = flag.Int64("timeout", 300, "")
 var networkConfigFile = flag.String("config", "config/devices.yaml", "Path to config file")
 var bleConfigFile = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
 
-//var houseDevices = []*device{}
-//var iotDevices = []*device{}
 var bleDevices = []*bleDevice{}
 var commandQueue = []*TimedCommand{}
 var knowDevices map[string]*device
@@ -83,16 +81,6 @@ func NewServer() HomeManager {
 		log.Println(err)
 	}
 	knowDevices = keys
-	//for _, item := range keys {
-	//	//if _, value := knowDevices[item.Id.Mac]; !value {
-	//	//	knowDevices[item.Id.Mac] = item.Home
-	//	//}
-	//	if item.Smart {
-	//		iotDevices = append(iotDevices, item)
-	//		continue
-	//	}
-	//	houseDevices = append(houseDevices, item)
-	//}
 
 	// Bluetooth
 	savedBle, err := readBleConfig(*bleConfigFile)
@@ -100,10 +88,6 @@ func NewServer() HomeManager {
 	if err != nil {
 		log.Println(err)
 	}
-	//bleDevices, err = uniqueBle(cfgBleDevices)
-	//if err != nil {
-	//	log.Println(err)
-	//}
 
 	c := cron.New(cron.WithSeconds())
 	c.AddFunc("*/10 * * * * *", func() {
@@ -113,23 +97,6 @@ func NewServer() HomeManager {
 		}
 	})
 
-	//c.AddFunc("*/10 * * * * *", func() {
-	//	if houseEmpty := server.isHouseEmpty(); houseEmpty != gHouseEmpty && houseEmpty{
-	//		gHouseEmpty = true
-	//		if *debug {
-	//			log.Println("House Empty")
-	//		} else {
-	//			err := notifications.SendNotification("House Empty", "No Humans")
-	//			if err != nil {
-	//				log.Println(err)
-	//			}
-	//		}
-	//	}
-	//})
-	//commandQueue = append(commandQueue, &TimedCommand{
-	//	Command:   "turn christmas tree off",
-	//	ExecuteAt: 0,
-	//})
 	c.AddFunc("*/10 * * * * *", func() {
 		for _, tc := range commandQueue {
 			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
@@ -311,7 +278,6 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		}
 	}
 
-	//houseDevices = append(houseDevices, &newDevice)
 	knowDevices[in.Mac] = &newDevice
 
 	s.registerMetric(newDevice)
@@ -518,7 +484,6 @@ func (s *Server) iotdeviceManager(iotDevice *device, houseEmpty bool) error {
 
 func (s *Server) deviceManager() error {
 	for _, device := range knowDevices {
-		//log.Println(device.Name)
 		timeAway := s.deviceDetectState(device.LastSeen)
 		if timeAway > *timeAwaySeconds && !device.Away {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
