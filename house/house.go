@@ -169,7 +169,7 @@ func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-// People API endpoint to determine person device status
+// HomeEmptyState API endpoint to determine house empty status
 func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
 	js, err := json.Marshal(gHouseEmpty)
 	if err != nil {
