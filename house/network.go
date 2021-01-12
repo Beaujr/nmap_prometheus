@@ -17,26 +17,12 @@ type device struct {
 	Person             bool      `json:"person",yaml:"person"`
 	Command            string    `json:"command",yaml:"command"`
 	Smart              bool      `json:"smart",yaml:"smart"`
+	Manufacturer       string    `json:"manufacturer",yaml:"manufacturer"`
 	SmartStatusCommand string    `json:"gaStatusCmd,omitempty",yaml:"gaStatusCmd,omitempty"`
 	PresenceAware      bool      `json:"aware,omitempty",yaml:"aware,omitempty"`
 }
 
-func uniqueNetwork(devices []*device) ([]*device, error) {
-	keys := make(map[string]bool)
-	list := []*device{}
-	for _, entry := range devices {
-		if _, value := keys[entry.Id.Mac]; !value {
-			keys[entry.Id.Mac] = true
-			list = append(list, entry)
-		}
-	}
-	err := writeNetworkDevices(list)
-	if err != nil {
-		return nil, err
-	}
-	return list, nil
-}
-func writeNetworkDevices(devices []*device) error {
+func writeNetworkDevices(devices map[string]*device) error {
 	d1, err := yaml.Marshal(devices)
 	if err != nil {
 		return err
@@ -44,7 +30,7 @@ func writeNetworkDevices(devices []*device) error {
 	return writeConfig(d1, *networkConfigFile)
 }
 
-func readNetworkConfig(filename string) ([]*device, error) {
+func readNetworkConfig(filename string) (map[string]*device, error) {
 	// Open our yamlFile
 	yamlFile, err := os.Open(filename)
 	// if we os.Open returns an error then handle it
@@ -59,10 +45,13 @@ func readNetworkConfig(filename string) ([]*device, error) {
 		return nil, err
 	}
 
-	var result []*device
+	var result map[string]*device
 	err = yaml.Unmarshal(byteValue, &result)
 	if err != nil {
 		return nil, err
+	}
+	if result == nil {
+		result = make(map[string]*device)
 	}
 	return result, nil
 }
