@@ -29,11 +29,12 @@ type networkId struct {
 var timeAwaySeconds = flag.Int64("timeout", 300, "")
 var networkConfigFile = flag.String("config", "config/devices.yaml", "Path to config file")
 var bleConfigFile = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
-var houseDevices = []*device{}
-var iotDevices = []*device{}
+
+//var houseDevices = []*device{}
+//var iotDevices = []*device{}
 var bleDevices = []*bleDevice{}
 var commandQueue = []*TimedCommand{}
-var knowDevices map[string]string
+var knowDevices map[string]*device
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
 var gHouseEmpty = false
@@ -77,26 +78,21 @@ func writeConfig(data []byte, filename string) error {
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	server := &Server{}
-	cfgDevices, err := readNetworkConfig(*networkConfigFile)
+	keys, err := readNetworkConfig(*networkConfigFile)
 	if err != nil {
 		log.Println(err)
 	}
-	allDevices, err := uniqueNetwork(cfgDevices)
-	if err != nil {
-		log.Println(err)
-	}
-
-	knowDevices = make(map[string]string)
-	for _, item := range allDevices {
-		if _, value := knowDevices[item.Id.Mac]; !value {
-			knowDevices[item.Id.Mac] = item.Home
-		}
-		if item.Smart {
-			iotDevices = append(iotDevices, item)
-			continue
-		}
-		houseDevices = append(houseDevices, item)
-	}
+	knowDevices = keys
+	//for _, item := range keys {
+	//	//if _, value := knowDevices[item.Id.Mac]; !value {
+	//	//	knowDevices[item.Id.Mac] = item.Home
+	//	//}
+	//	if item.Smart {
+	//		iotDevices = append(iotDevices, item)
+	//		continue
+	//	}
+	//	houseDevices = append(houseDevices, item)
+	//}
 
 	// Bluetooth
 	savedBle, err := readBleConfig(*bleConfigFile)
@@ -117,12 +113,19 @@ func NewServer() HomeManager {
 		}
 	})
 
-	c.AddFunc("*/10 * * * * *", func() {
-		err := server.iotStatusManager()
-		if err != nil {
-			log.Println(err)
-		}
-	})
+	//c.AddFunc("*/10 * * * * *", func() {
+	//	if houseEmpty := server.isHouseEmpty(); houseEmpty != gHouseEmpty && houseEmpty{
+	//		gHouseEmpty = true
+	//		if *debug {
+	//			log.Println("House Empty")
+	//		} else {
+	//			err := notifications.SendNotification("House Empty", "No Humans")
+	//			if err != nil {
+	//				log.Println(err)
+	//			}
+	//		}
+	//	}
+	//})
 	//commandQueue = append(commandQueue, &TimedCommand{
 	//	Command:   "turn christmas tree off",
 	//	ExecuteAt: 0,
@@ -148,7 +151,7 @@ func NewServer() HomeManager {
 	})
 
 	metrics = make(map[string]prometheus.Gauge)
-	for _, item := range append(iotDevices, houseDevices...) {
+	for _, item := range knowDevices {
 		log.Println(fmt.Sprintf("Registering metric for %s", item.Name))
 		server.registerMetric(*item)
 	}
@@ -160,7 +163,7 @@ func NewServer() HomeManager {
 
 // Devices API endpoint to determine devices status
 func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
-	js, err := json.Marshal(append(iotDevices, houseDevices...))
+	js, err := json.Marshal(knowDevices)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -174,7 +177,7 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 // People API endpoint to determine person device status
 func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 	people := make([]*device, 0)
-	for _, device := range houseDevices {
+	for _, device := range knowDevices {
 		if device.Person {
 			people = append(people, device)
 		}
@@ -217,14 +220,14 @@ func (s *Server) recordMetrics() {
 	go func() {
 		for {
 			homeCounter := 0
-			for _, person := range houseDevices {
+			for _, person := range knowDevices {
 				if !person.Away && person.Person {
 					homeCounter++
 				}
 			}
 			peopleHome.Set(float64(homeCounter))
 
-			for _, item := range append(iotDevices, houseDevices...) {
+			for _, item := range knowDevices {
 				state := 1
 				if item.Away {
 					state = 0
@@ -308,23 +311,14 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		}
 	}
 
-	houseDevices = append(houseDevices, &newDevice)
-	_, err = uniqueNetwork(houseDevices)
-	if err != nil {
-		return err
-	}
+	//houseDevices = append(houseDevices, &newDevice)
+	knowDevices[in.Mac] = &newDevice
+
 	s.registerMetric(newDevice)
 	return nil
 }
 
 func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest) error {
-	if incoming.Ip != "" && incoming.Ip != houseDevice.Id.Ip {
-		houseDevice.Id.Ip = incoming.Ip
-		err := writeNetworkDevices(houseDevices)
-		if err != nil {
-			log.Printf("Error updating: %s", houseDevice.Id.UUID)
-		}
-	}
 
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
@@ -335,19 +329,35 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	}
 
 	timeAway := s.deviceDetectState(houseDevice.LastSeen)
-	if timeAway > *timeAwaySeconds && houseDevice.Person {
+	if timeAway > *timeAwaySeconds {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
-		if *debug {
-			log.Printf("Notification: %s, %s", houseDevice.Name, "is home")
-		} else {
-			err := notifications.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home))
-			if err != nil {
-				return err
+		if houseDevice.Person {
+			if *debug {
+				log.Printf("Notification: %s, %s", houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home))
+			} else {
+				err := notifications.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home))
+				if err != nil {
+					return err
+				}
+				if gHouseEmpty {
+					gHouseEmpty = false
+					err := notifications.SendNotification(houseDevice.Home, "House no longer empty")
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
 	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
+	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
+		knowDevices[incoming.Mac] = houseDevice
+		err := writeNetworkDevices(knowDevices)
+		if err != nil {
+			log.Printf("Error updating: %s", houseDevice.Id.UUID)
+		}
+	}
 	return nil
 }
 
@@ -359,20 +369,14 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	}
 
 	if _, value := knowDevices[in.Mac]; !value {
-		knowDevices[in.Mac] = in.Home
 		err := s.newDevice(in)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		for _, houseDevice := range houseDevices {
-			if incoming.Mac == houseDevice.Id.Mac && incoming.Mac != "" {
-				err := s.existingDevice(houseDevice, incoming)
-				if err != nil {
-					return nil, err
-				}
-				s.iotStatusManager()
-			}
+		err := s.existingDevice(knowDevices[in.Mac], incoming)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -452,7 +456,7 @@ func (s *Server) isDeviceOn(iot *device) (bool, error) {
 
 func (s *Server) isHouseEmpty() bool {
 	houseEmpty := true
-	for _, device := range houseDevices {
+	for _, device := range knowDevices {
 		if !device.Away && device.Person {
 			houseEmpty = false
 		}
@@ -461,16 +465,17 @@ func (s *Server) isHouseEmpty() bool {
 }
 
 func (s *Server) iotStatusManager() error {
-	houseEmpty := s.isHouseEmpty()
-	if gHouseEmpty == houseEmpty {
-		return nil
-	}
-	for _, device := range iotDevices {
-		err := s.iotdeviceManager(device, gHouseEmpty)
-		if err != nil {
-			return err
+	if houseEmpty := s.isHouseEmpty(); houseEmpty != gHouseEmpty && houseEmpty {
+		gHouseEmpty = true
+		if *debug {
+			log.Println("House Empty")
+		} else {
+			err := notifications.SendNotification("House Empty", "No Humans")
+			if err != nil {
+				log.Println(err)
+				return err
+			}
 		}
-
 	}
 	return nil
 }
@@ -512,7 +517,7 @@ func (s *Server) iotdeviceManager(iotDevice *device, houseEmpty bool) error {
 }
 
 func (s *Server) deviceManager() error {
-	for _, device := range houseDevices {
+	for _, device := range knowDevices {
 		//log.Println(device.Name)
 		timeAway := s.deviceDetectState(device.LastSeen)
 		if timeAway > *timeAwaySeconds && !device.Away {
