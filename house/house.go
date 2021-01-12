@@ -35,7 +35,7 @@ var commandQueue = []*TimedCommand{}
 var knowDevices map[string]*device
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
-var gHouseEmpty = false
+var gHouseEmpty map[string]bool
 var debug = flag.Bool("debug", false, "Debug mode")
 
 var (
@@ -51,13 +51,14 @@ type HomeManager interface {
 	deviceDetectState(phone int64) int64
 	deviceManager() error
 	isDeviceOn(iot *device) (bool, error)
-	isHouseEmpty() bool
+	isHouseEmpty(home string) bool
 	httpHealthCheck(url string) bool
-	iotdeviceManager(iotDevice *device, empty bool) error
+	//iotdeviceManager(iotDevice *device, empty bool) error
 	iotStatusManager() error
 	recordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
+	HomeEmptyState(w http.ResponseWriter, req *http.Request)
 }
 
 // Server is an implementation of the proto HomeDetectorServer
@@ -118,9 +119,13 @@ func NewServer() HomeManager {
 	})
 
 	metrics = make(map[string]prometheus.Gauge)
+	gHouseEmpty = make(map[string]bool)
 	for _, item := range knowDevices {
 		log.Println(fmt.Sprintf("Registering metric for %s", item.Name))
 		server.registerMetric(*item)
+		if _, val := gHouseEmpty[item.Home]; !val {
+			gHouseEmpty[item.Home] = server.isHouseEmpty(item.Home)
+		}
 	}
 
 	c.Start()
@@ -130,7 +135,11 @@ func NewServer() HomeManager {
 
 // Devices API endpoint to determine devices status
 func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
-	js, err := json.Marshal(knowDevices)
+	devices := make([]*device, 0)
+	for _, device := range knowDevices {
+		devices = append(devices, device)
+	}
+	js, err := json.Marshal(devices)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -150,6 +159,19 @@ func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	js, err := json.Marshal(people)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+	return
+}
+
+// People API endpoint to determine person device status
+func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
+	js, err := json.Marshal(gHouseEmpty)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -305,8 +327,8 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 				if err != nil {
 					return err
 				}
-				if gHouseEmpty {
-					gHouseEmpty = false
+				if val := gHouseEmpty[houseDevice.Home]; val {
+					gHouseEmpty[houseDevice.Home] = false
 					err := notifications.SendNotification(houseDevice.Home, "House no longer empty")
 					if err != nil {
 						return err
@@ -315,6 +337,11 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 			}
 		}
 	}
+
+	if houseDevice.Person {
+		gHouseEmpty[houseDevice.Home] = false
+	}
+
 	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
@@ -420,10 +447,10 @@ func (s *Server) isDeviceOn(iot *device) (bool, error) {
 	return !iot.Away, nil
 }
 
-func (s *Server) isHouseEmpty() bool {
+func (s *Server) isHouseEmpty(home string) bool {
 	houseEmpty := true
 	for _, device := range knowDevices {
-		if !device.Away && device.Person {
+		if !device.Away && device.Person && device.Home == home {
 			houseEmpty = false
 		}
 	}
@@ -431,56 +458,59 @@ func (s *Server) isHouseEmpty() bool {
 }
 
 func (s *Server) iotStatusManager() error {
-	if houseEmpty := s.isHouseEmpty(); houseEmpty != gHouseEmpty && houseEmpty {
-		gHouseEmpty = true
-		if *debug {
-			log.Println("House Empty")
-		} else {
-			err := notifications.SendNotification("House Empty", "No Humans")
-			if err != nil {
-				log.Println(err)
-				return err
+	for home, empty := range gHouseEmpty {
+		if houseEmpty := s.isHouseEmpty(home); houseEmpty != empty {
+			gHouseEmpty[home] = houseEmpty
+			if *debug {
+				log.Printf("House (%s) is Empty(%v)", home, houseEmpty)
+			} else {
+				err := notifications.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home))
+				if err != nil {
+					log.Println(err)
+					return err
+				}
 			}
 		}
 	}
+
 	return nil
 }
 
-func (s *Server) returnToHouseManager(iotDevice *device) error {
-	houseEmpty := s.isHouseEmpty()
-	if gHouseEmpty != houseEmpty {
-		// the house isnt empty but it was until this device returned
-		if !houseEmpty {
-			gHouseEmpty = houseEmpty
-			command := fmt.Sprintf("%s returned home", iotDevice.Name)
-			err := notifications.SendNotification("House no longer Empty", command)
-			if err != nil {
-				return nil
-			}
-		}
-	}
-	return nil
-}
+//func (s *Server) returnToHouseManager(iotDevice *device) error {
+//	houseEmpty := s.isHouseEmpty()
+//	if gHouseEmpty != houseEmpty {
+//		// the house isnt empty but it was until this device returned
+//		if !houseEmpty {
+//			gHouseEmpty = houseEmpty
+//			command := fmt.Sprintf("%s returned home", iotDevice.Name)
+//			err := notifications.SendNotification("House no longer Empty", command)
+//			if err != nil {
+//				return nil
+//			}
+//		}
+//	}
+//	return nil
+//}
 
-func (s *Server) iotdeviceManager(iotDevice *device, houseEmpty bool) error {
-	if houseEmpty && iotDevice.PresenceAware {
-		gHouseEmpty = houseEmpty
-		command := fmt.Sprintf("Turning %s off", iotDevice.Name)
-		log.Println(command)
-		if !*debug {
-			err := notifications.SendNotification("House Empty", command)
-			if err != nil {
-				return nil
-			}
-			_, err = s.callAssistant(fmt.Sprintf("turn %s off", iotDevice.Name))
-			if err != nil {
-				return err
-			}
-		}
-		iotDevice.Away = true
-	}
-	return nil
-}
+//func (s *Server) iotdeviceManager(iotDevice *device, houseEmpty bool) error {
+//	if houseEmpty && iotDevice.PresenceAware {
+//		gHouseEmpty = houseEmpty
+//		command := fmt.Sprintf("Turning %s off", iotDevice.Name)
+//		log.Println(command)
+//		if !*debug {
+//			err := notifications.SendNotification("House Empty", command)
+//			if err != nil {
+//				return nil
+//			}
+//			_, err = s.callAssistant(fmt.Sprintf("turn %s off", iotDevice.Name))
+//			if err != nil {
+//				return err
+//			}
+//		}
+//		iotDevice.Away = true
+//	}
+//	return nil
+//}
 
 func (s *Server) deviceManager() error {
 	for _, device := range knowDevices {
@@ -501,7 +531,6 @@ func (s *Server) deviceManager() error {
 				} else {
 					log.Printf("Notification: %s: %s", device.Name, "Has left the house")
 				}
-
 			}
 		}
 	}
