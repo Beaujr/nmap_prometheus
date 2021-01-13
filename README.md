@@ -111,5 +111,6 @@ This will be supported in limited capacity with the following flags.
          - ./config:/config
        command: '-debug=true'
 ```
+
 - run `docker-compose up`
 - open http://localhost:2112/metrics and see the prometheus metrics
