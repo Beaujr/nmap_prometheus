@@ -40,9 +40,10 @@ var commandQueue = []*TimedCommand{}
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
 var gHouseEmpty map[string]bool
-var DevicesPrefix string = "/devices"
-var HomesPrefix string = "/home"
-var BlesPrefix string = "/ble"
+
+var devicesPrefix string = "/devices"
+var homePrefix string = "/home"
+var blesPrefix string = "/ble"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -59,7 +60,6 @@ type HomeManager interface {
 	isDeviceOn(iot *device) (bool, error)
 	isHouseEmpty(home string) bool
 	httpHealthCheck(url string) bool
-	//iotdeviceManager(iotDevice *device, empty bool) error
 	iotStatusManager() error
 	recordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
@@ -303,9 +303,9 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	}
 	vendor := "unknown"
 	if in.Mac != in.Ip {
-		mac_vendor, err := macvendor.GetManufacturer(in.Mac)
-		if mac_vendor != nil {
-			vendor = *mac_vendor
+		macVendor, err := macvendor.GetManufacturer(in.Mac)
+		if macVendor != nil {
+			vendor = *macVendor
 		}
 		if err != nil {
 			log.Printf(err.Error())
@@ -410,18 +410,18 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 		if found {
 			etcdKey := strings.ReplaceAll(strings.ReplaceAll(in.Ip, ".", "_"), ":", "_")
-			_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, etcdKey))
+			_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", devicesPrefix, etcdKey))
 			if err != nil {
 				log.Println(err.Error())
 			}
-			_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, in.Ip))
+			_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", devicesPrefix, in.Ip))
 			if err != nil {
 				log.Println(err.Error())
 			}
 		}
 
 	}
-	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, in.Mac))
+	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s/%s", devicesPrefix, in.Mac))
 	if err != nil {
 		return nil, err
 	}

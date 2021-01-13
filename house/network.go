@@ -37,7 +37,7 @@ func (s *Server) writeNetworkDevice(item *device) error {
 		log.Fatalf(err.Error())
 	}
 
-	key := fmt.Sprintf("%s/%s", DevicesPrefix, item.Id.UUID)
+	key := fmt.Sprintf("%s/%s", devicesPrefix, item.Id.UUID)
 	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
@@ -57,7 +57,7 @@ func (s *Server) readNetworkConfig() (map[string]*device, error) {
 		val := items.Kvs[i].Value
 		key := items.Kvs[i].Key
 		// Once off Beau Code
-		//if !strings.Contains(string(key), DevicesPrefix) {
+		//if !strings.Contains(string(key), devicesPrefix) {
 		//	_, err := s.etcdClient.Delete(context.Background(), string(key))
 		//	if err != nil {
 		//		log.Fatalf(err.Error())
