@@ -391,9 +391,35 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
-	if incoming.Mac == "" {
-		//return &pb.Reply{Acknowledged: false}, nil
+	if incoming.Mac == "" && incoming.Home != "" {
+		devices, err := s.readNetworkConfig()
+		if err != nil {
+			return nil, err
+		}
 		in.Mac = in.Ip
+
+		found := false
+		for _, v := range devices {
+			// on same home and same ip, report it as the one with a mac
+			if v.Id.Ip == in.Ip && v.Home == in.Home && v.Id.Ip != v.Id.Mac {
+				in.Mac = v.Id.Mac
+				found = true
+				continue
+			}
+		}
+
+		if found {
+			etcdKey := strings.ReplaceAll(strings.ReplaceAll(in.Ip, ".", "_"), ":", "_")
+			_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, etcdKey))
+			if err != nil {
+				log.Println(err.Error())
+			}
+			_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, in.Ip))
+			if err != nil {
+				log.Println(err.Error())
+			}
+		}
+
 	}
 	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, in.Mac))
 	if err != nil {
