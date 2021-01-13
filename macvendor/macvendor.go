@@ -9,8 +9,6 @@ import (
 
 // GetManufacturer to get the vendor of the device
 func GetManufacturer(mac string) (*string, error) {
-	//log.Printf("Notification: %s , %s", title, message)
-	//payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -18,7 +16,6 @@ func GetManufacturer(mac string) (*string, error) {
 	client := &http.Client{Transport: tr}
 	requestURL := fmt.Sprintf("https://api.macvendors.com/%s", mac)
 	req, _ := http.NewRequest("GET", requestURL, nil)
-	//req.Header.Add("content-type", "application/json")
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
