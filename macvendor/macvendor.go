@@ -1,6 +1,7 @@
 package macvendor
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,10 +11,15 @@ import (
 func GetManufacturer(mac string) (*string, error) {
 	//log.Printf("Notification: %s , %s", title, message)
 	//payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
 	requestURL := fmt.Sprintf("https://api.macvendors.com/%s", mac)
 	req, _ := http.NewRequest("GET", requestURL, nil)
 	//req.Header.Add("content-type", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
