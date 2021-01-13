@@ -1,11 +1,12 @@
 package house
 
 import (
+	"context"
 	"fmt"
+	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"log"
-	"os"
+	"strings"
 )
 
 type device struct {
@@ -30,28 +31,47 @@ func writeNetworkDevices(devices map[string]*device) error {
 	return writeConfig(d1, *networkConfigFile)
 }
 
-func readNetworkConfig(filename string) (map[string]*device, error) {
-	// Open our yamlFile
-	yamlFile, err := os.Open(filename)
-	// if we os.Open returns an error then handle it
+func (s *Server) writeNetworkDevice(item *device) error {
+	d1, err := yaml.Marshal(item)
 	if err != nil {
-		fmt.Println(err)
-	}
-	log.Println(fmt.Sprintf("Successfully Opened: %s", filename))
-	defer yamlFile.Close()
-
-	byteValue, err := ioutil.ReadAll(yamlFile)
-	if err != nil {
-		return nil, err
+		log.Fatalf(err.Error())
 	}
 
+	key := fmt.Sprintf("%s/%s", DevicesPrefix, item.Id.UUID)
+	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	return err
+}
+
+func (s *Server) readNetworkConfig() (map[string]*device, error) {
 	var result map[string]*device
-	err = yaml.Unmarshal(byteValue, &result)
+	result = make(map[string]*device)
+	items, err := s.etcdClient.Get(context.Background(), "", clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
-	if result == nil {
-		result = make(map[string]*device)
+	if items == nil {
+		return result, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		val := items.Kvs[i].Value
+		key := items.Kvs[i].Key
+		// Once off Beau Code
+		//if !strings.Contains(string(key), DevicesPrefix) {
+		//	_, err := s.etcdClient.Delete(context.Background(), string(key))
+		//	if err != nil {
+		//		log.Fatalf(err.Error())
+		//	}
+		//}
+		//// end once off
+		var dev *device
+		err = yaml.Unmarshal(val, &dev)
+		if err != nil {
+			return nil, err
+		}
+		newKey := strings.ReplaceAll(string(key), "/devices/", "")
+		result[string(newKey)] = dev
+		i++
 	}
 	return result, nil
 }

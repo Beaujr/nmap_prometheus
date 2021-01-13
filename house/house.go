@@ -6,12 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/assistant"
+	"github.com/beaujr/nmap_prometheus/etcd"
 	"github.com/beaujr/nmap_prometheus/macvendor"
 	"github.com/beaujr/nmap_prometheus/notifications"
 	pb "github.com/beaujr/nmap_prometheus/proto"
+	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -29,14 +32,17 @@ type networkId struct {
 var timeAwaySeconds = flag.Int64("timeout", 300, "")
 var networkConfigFile = flag.String("config", "config/devices.yaml", "Path to config file")
 var bleConfigFile = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
+var etcdServers = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
+var debug = flag.Bool("debug", false, "Debug mode")
 
 var bleDevices = []*bleDevice{}
 var commandQueue = []*TimedCommand{}
-var knowDevices map[string]*device
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
 var gHouseEmpty map[string]bool
-var debug = flag.Bool("debug", false, "Debug mode")
+var DevicesPrefix string = "/devices"
+var HomesPrefix string = "/home"
+var BlesPrefix string = "/ble"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -64,6 +70,7 @@ type HomeManager interface {
 // Server is an implementation of the proto HomeDetectorServer
 type Server struct {
 	pb.UnimplementedHomeDetectorServer
+	etcdClient etcdv3.KV
 }
 
 func writeConfig(data []byte, filename string) error {
@@ -76,13 +83,13 @@ func writeConfig(data []byte, filename string) error {
 
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
-	server := &Server{}
-	keys, err := readNetworkConfig(*networkConfigFile)
+	etcdClient := etcd.NewClient([]string{*etcdServers})
+
+	server := &Server{etcdClient: etcdClient}
+	_, err := server.readNetworkConfig()
 	if err != nil {
 		log.Println(err)
 	}
-	knowDevices = keys
-
 	// Bluetooth
 	savedBle, err := readBleConfig(*bleConfigFile)
 	bleDevices = savedBle
@@ -120,6 +127,11 @@ func NewServer() HomeManager {
 
 	metrics = make(map[string]prometheus.Gauge)
 	gHouseEmpty = make(map[string]bool)
+
+	knowDevices, err := server.readNetworkConfig()
+	if err != nil {
+		log.Printf(err.Error())
+	}
 	for _, item := range knowDevices {
 		log.Println(fmt.Sprintf("Registering metric for %s", item.Name))
 		server.registerMetric(*item)
@@ -136,7 +148,12 @@ func NewServer() HomeManager {
 // Devices API endpoint to determine devices status
 func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 	devices := make([]*device, 0)
-	for _, device := range knowDevices {
+	items, err := s.readNetworkConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, device := range items {
 		devices = append(devices, device)
 	}
 	js, err := json.Marshal(devices)
@@ -153,7 +170,12 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 // People API endpoint to determine person device status
 func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 	people := make([]*device, 0)
-	for _, device := range knowDevices {
+	devices, err := s.readNetworkConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, device := range devices {
 		if device.Person {
 			people = append(people, device)
 		}
@@ -208,6 +230,10 @@ func (s *Server) registerMetric(item device) {
 func (s *Server) recordMetrics() {
 	go func() {
 		for {
+			knowDevices, err := s.readNetworkConfig()
+			if err != nil {
+				log.Printf(err.Error())
+			}
 			homeCounter := 0
 			for _, person := range knowDevices {
 				if !person.Away && person.Person {
@@ -275,12 +301,19 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	if in.Mac != "" {
 		name = in.Mac
 	}
+	vendor := "unknown"
+	if in.Mac != in.Ip {
+		mac_vendor, err := macvendor.GetManufacturer(in.Mac)
+		if mac_vendor != nil {
+			vendor = *mac_vendor
+		}
+		if err != nil {
+			log.Printf(err.Error())
+			vendor = name
+		}
 
-	vendor, err := macvendor.GetManufacturer(in.Mac)
-	if err != nil {
-		log.Printf(err.Error())
-		vendor = &name
 	}
+
 	newDevice := device{
 		Name:         strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
 		Id:           networkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
@@ -288,7 +321,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		LastSeen:     int64(time.Now().Unix()),
 		Person:       false,
 		Command:      "",
-		Manufacturer: *vendor,
+		Manufacturer: vendor,
 		Home:         in.Home,
 	}
 
@@ -300,8 +333,10 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		}
 	}
 
-	knowDevices[in.Mac] = &newDevice
-
+	err := s.writeNetworkDevice(&newDevice)
+	if err != nil {
+		log.Printf("Error saving to ETCD: %s", err.Error())
+	}
 	s.registerMetric(newDevice)
 	return nil
 }
@@ -345,10 +380,9 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
-		knowDevices[incoming.Mac] = houseDevice
-		err := writeNetworkDevices(knowDevices)
+		err := s.writeNetworkDevice(houseDevice)
 		if err != nil {
-			log.Printf("Error updating: %s", houseDevice.Id.UUID)
+			log.Printf("Error saving to ETCD: %s", err.Error())
 		}
 	}
 	return nil
@@ -358,16 +392,27 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
 	if incoming.Mac == "" {
-		return &pb.Reply{Acknowledged: false}, nil
+		//return &pb.Reply{Acknowledged: false}, nil
+		in.Mac = in.Ip
 	}
-
-	if _, value := knowDevices[in.Mac]; !value {
+	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s/%s", DevicesPrefix, in.Mac))
+	if err != nil {
+		return nil, err
+	}
+	if item.Count == 0 {
 		err := s.newDevice(in)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		err := s.existingDevice(knowDevices[in.Mac], incoming)
+		strDevice := item.Kvs[0].Value
+		var exDevice *device
+		err = yaml.Unmarshal(strDevice, &exDevice)
+		if err != nil {
+			return nil, err
+		}
+
+		err = s.existingDevice(exDevice, incoming)
 		if err != nil {
 			return nil, err
 		}
@@ -449,7 +494,11 @@ func (s *Server) isDeviceOn(iot *device) (bool, error) {
 
 func (s *Server) isHouseEmpty(home string) bool {
 	houseEmpty := true
-	for _, device := range knowDevices {
+	devices, err := s.readNetworkConfig()
+	if err != nil {
+		log.Println("Failed to read from etcd")
+	}
+	for _, device := range devices {
 		if !device.Away && device.Person && device.Home == home {
 			houseEmpty = false
 		}
@@ -476,44 +525,12 @@ func (s *Server) iotStatusManager() error {
 	return nil
 }
 
-//func (s *Server) returnToHouseManager(iotDevice *device) error {
-//	houseEmpty := s.isHouseEmpty()
-//	if gHouseEmpty != houseEmpty {
-//		// the house isnt empty but it was until this device returned
-//		if !houseEmpty {
-//			gHouseEmpty = houseEmpty
-//			command := fmt.Sprintf("%s returned home", iotDevice.Name)
-//			err := notifications.SendNotification("House no longer Empty", command)
-//			if err != nil {
-//				return nil
-//			}
-//		}
-//	}
-//	return nil
-//}
-
-//func (s *Server) iotdeviceManager(iotDevice *device, houseEmpty bool) error {
-//	if houseEmpty && iotDevice.PresenceAware {
-//		gHouseEmpty = houseEmpty
-//		command := fmt.Sprintf("Turning %s off", iotDevice.Name)
-//		log.Println(command)
-//		if !*debug {
-//			err := notifications.SendNotification("House Empty", command)
-//			if err != nil {
-//				return nil
-//			}
-//			_, err = s.callAssistant(fmt.Sprintf("turn %s off", iotDevice.Name))
-//			if err != nil {
-//				return err
-//			}
-//		}
-//		iotDevice.Away = true
-//	}
-//	return nil
-//}
-
 func (s *Server) deviceManager() error {
-	for _, device := range knowDevices {
+	devices, err := s.readNetworkConfig()
+	if err != nil {
+		log.Println("Failed to read from etcd")
+	}
+	for _, device := range devices {
 		timeAway := s.deviceDetectState(device.LastSeen)
 		if timeAway > *timeAwaySeconds && !device.Away {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
@@ -531,6 +548,10 @@ func (s *Server) deviceManager() error {
 				} else {
 					log.Printf("Notification: %s: %s", device.Name, "Has left the house")
 				}
+			}
+			err = s.writeNetworkDevice(device)
+			if err != nil {
+				return nil
 			}
 		}
 	}
