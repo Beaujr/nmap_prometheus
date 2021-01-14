@@ -6,6 +6,7 @@ import (
 	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
 	"log"
+	"strconv"
 	"strings"
 )
 
@@ -37,15 +38,14 @@ func (s *Server) writeNetworkDevice(item *device) error {
 		log.Fatalf(err.Error())
 	}
 
-	key := fmt.Sprintf("%s/%s", devicesPrefix, item.Id.UUID)
+	key := fmt.Sprintf("%s%s", devicesPrefix, item.Id.UUID)
 	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
-
 func (s *Server) readNetworkConfig() (map[string]*device, error) {
 	var result map[string]*device
 	result = make(map[string]*device)
-	items, err := s.etcdClient.Get(context.Background(), "", clientv3.WithPrefix())
+	items, err := s.etcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -56,21 +56,50 @@ func (s *Server) readNetworkConfig() (map[string]*device, error) {
 	for i < int(items.Count) {
 		val := items.Kvs[i].Value
 		key := items.Kvs[i].Key
-		// Once off Beau Code
-		//if !strings.Contains(string(key), devicesPrefix) {
-		//	_, err := s.etcdClient.Delete(context.Background(), string(key))
-		//	if err != nil {
-		//		log.Fatalf(err.Error())
-		//	}
-		//}
-		//// end once off
 		var dev *device
 		err = yaml.Unmarshal(val, &dev)
 		if err != nil {
 			return nil, err
 		}
-		newKey := strings.ReplaceAll(string(key), "/devices/", "")
+		strKey := string(key)
+		newKey := strings.ReplaceAll(strKey, devicesPrefix, "")
+		//if strings.Contains(strKey, fmt.Sprintf("/devices%s", dev.Id.Mac)) {
+		//	key2 := strings.ReplaceAll(strKey, "/devices", "/devices/")
+		//	s.etcdClient.Put(context.Background(), key2, string(val))
+		//	s.etcdClient.Delete(context.Background(), strKey)
+		//}
+		//if strings.Contains(strKey, "/devices//") {
+		//	key2 := strings.ReplaceAll(strKey, "//", "/")
+		//	s.etcdClient.Put(context.Background(), key2, string(val))
+		//	s.etcdClient.Delete(context.Background(), strKey)
+		//}
 		result[string(newKey)] = dev
+		i++
+	}
+	return result, nil
+}
+func (s *Server) readHomesConfig() (map[string]*bool, error) {
+	var result map[string]*bool
+	result = make(map[string]*bool)
+	items, err := s.etcdClient.Get(context.Background(), homePrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return result, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		val := items.Kvs[i].Value
+		key := items.Kvs[i].Key
+		newKey := strings.ReplaceAll(string(key), homePrefix, "")
+		boolVal, _ := strconv.ParseBool(string(val))
+		if strings.Contains(string(key), "//") {
+			key2 := strings.ReplaceAll(string(key), "//", "")
+			s.etcdClient.Put(context.Background(), key2, string(val))
+			s.etcdClient.Delete(context.Background(), string(key))
+		}
+		result[string(newKey)] = &boolVal
 		i++
 	}
 	return result, nil

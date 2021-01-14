@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,11 +40,12 @@ var bleDevices = []*bleDevice{}
 var commandQueue = []*TimedCommand{}
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
-var gHouseEmpty map[string]bool
 
-var devicesPrefix string = "/devices"
-var homePrefix string = "/home"
-var blesPrefix string = "/ble"
+//var gHouseEmpty map[string]bool
+
+var devicesPrefix string = "/devices/"
+var homePrefix string = "/homes/"
+var blesPrefix string = "/bles"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -104,6 +106,12 @@ func NewServer() HomeManager {
 			log.Println(err)
 		}
 	})
+	c.AddFunc("*/10 * * * * *", func() {
+		err := server.iotStatusManager()
+		if err != nil {
+			log.Println(err)
+		}
+	})
 
 	c.AddFunc("*/10 * * * * *", func() {
 		for _, tc := range commandQueue {
@@ -126,17 +134,23 @@ func NewServer() HomeManager {
 	})
 
 	metrics = make(map[string]prometheus.Gauge)
-	gHouseEmpty = make(map[string]bool)
 
 	knowDevices, err := server.readNetworkConfig()
 	if err != nil {
 		log.Printf(err.Error())
 	}
+	homes := make([]string, 0)
 	for _, item := range knowDevices {
 		log.Println(fmt.Sprintf("Registering metric for %s", item.Name))
 		server.registerMetric(*item)
-		if _, val := gHouseEmpty[item.Home]; !val {
-			gHouseEmpty[item.Home] = server.isHouseEmpty(item.Home)
+		homes = append(homes, item.Home)
+	}
+
+	for _, home := range homes {
+		homeKey := fmt.Sprintf("%s%s", homePrefix, home)
+		_, err := server.etcdClient.Put(context.Background(), homeKey, strconv.FormatBool(server.isHouseEmpty(home)))
+		if err != nil {
+			log.Panic(err.Error())
 		}
 	}
 
@@ -193,7 +207,12 @@ func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 
 // HomeEmptyState API endpoint to determine house empty status
 func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
-	js, err := json.Marshal(gHouseEmpty)
+	homes, err := s.readHomesConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	js, err := json.Marshal(homes)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -362,19 +381,38 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 				if err != nil {
 					return err
 				}
-				if val := gHouseEmpty[houseDevice.Home]; val {
-					gHouseEmpty[houseDevice.Home] = false
-					err := notifications.SendNotification(houseDevice.Home, "House no longer empty")
-					if err != nil {
-						return err
-					}
-				}
 			}
 		}
 	}
 
 	if houseDevice.Person {
-		gHouseEmpty[houseDevice.Home] = false
+		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
+		houseStatus, err := s.etcdClient.Get(context.Background(), homeKey)
+		if err != nil {
+			log.Panic(err.Error())
+		}
+
+		if houseStatus.Count == 0 {
+			homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
+			_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
+			if err != nil {
+				log.Panic(err.Error())
+			}
+		} else if val, err := strconv.ParseBool(string(houseStatus.Kvs[0].Value)); val && err == nil {
+			homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
+			_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
+			if err != nil {
+				log.Panic(err.Error())
+			}
+			if *debug {
+				log.Println("House no longer empty")
+			} else {
+				err := notifications.SendNotification(houseDevice.Home, "No longer Empty")
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	houseDevice.Away = false
@@ -407,11 +445,11 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) error {
 
 	if found {
 		etcdKey := strings.ReplaceAll(strings.ReplaceAll(in.Ip, ".", "_"), ":", "_")
-		_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", devicesPrefix, etcdKey))
+		_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, etcdKey))
 		if err != nil {
 			log.Println(err.Error())
 		}
-		_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s/%s", devicesPrefix, in.Ip))
+		_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Ip))
 		if err != nil {
 			log.Println(err.Error())
 		}
@@ -429,7 +467,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			return nil, err
 		}
 	}
-	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s/%s", devicesPrefix, in.Mac))
+	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Mac))
 	if err != nil {
 		return nil, err
 	}
@@ -541,9 +579,17 @@ func (s *Server) isHouseEmpty(home string) bool {
 }
 
 func (s *Server) iotStatusManager() error {
+	gHouseEmpty, err := s.readHomesConfig()
+	if err != nil {
+		return err
+	}
 	for home, empty := range gHouseEmpty {
-		if houseEmpty := s.isHouseEmpty(home); houseEmpty != empty {
-			gHouseEmpty[home] = houseEmpty
+		if houseEmpty := s.isHouseEmpty(home); houseEmpty != *empty {
+			_, err := s.etcdClient.Put(context.Background(), fmt.Sprintf("%s%s", homePrefix, home), strconv.FormatBool(houseEmpty))
+			if err != nil {
+				log.Println(err)
+				return err
+			}
 			if *debug {
 				log.Printf("House (%s) is Empty(%v)", home, houseEmpty)
 			} else {
@@ -570,10 +616,6 @@ func (s *Server) deviceManager() error {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
 			if device.Person {
-				err := s.iotStatusManager()
-				if err != nil {
-					return nil
-				}
 				if !*debug {
 					err := notifications.SendNotification(device.Name, "Has left the house")
 					if err != nil {
@@ -584,6 +626,10 @@ func (s *Server) deviceManager() error {
 				}
 			}
 			err = s.writeNetworkDevice(device)
+			if err != nil {
+				return nil
+			}
+			err := s.iotStatusManager()
 			if err != nil {
 				return nil
 			}
