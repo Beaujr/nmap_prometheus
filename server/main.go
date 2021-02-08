@@ -16,10 +16,6 @@ import (
 var port = flag.String("port", "50051", "Port for GRPC Server")
 var apiPort = flag.String("apiPort", "2112", "Port for API Server")
 
-//const (
-//	port = ":50051"
-//)
-
 func main() {
 	flag.Parse()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", *port))
