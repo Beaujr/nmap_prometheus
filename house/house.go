@@ -106,10 +106,13 @@ func NewServer() HomeManager {
 			log.Println(err)
 		}
 	})
-	c.AddFunc("*/10 * * * * *", func() {
-		err := server.iotStatusManager()
+	c.AddFunc("* */1 * * * *", func() {
+		knowDevices, err := server.readNetworkConfig()
 		if err != nil {
-			log.Println(err)
+			log.Printf(err.Error())
+		}
+		for _, val := range knowDevices {
+			server.registerMetric(*val)
 		}
 	})
 
@@ -122,7 +125,7 @@ func NewServer() HomeManager {
 					if err != nil {
 						log.Println(err)
 					}
-					err = notifications.SendNotification("Scheduled Task", tc.Command)
+					err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
 					if err != nil {
 						log.Println(err)
 					}
@@ -232,6 +235,7 @@ func (s *Server) registerMetric(item device) {
 				"name": strings.ReplaceAll(item.Name, " ", "_"),
 				"mac":  item.Id.Mac,
 				"ip":   item.Id.Ip,
+				"home": item.Home,
 			},
 		})
 		metrics[item.Name+"_lastseen"] = promauto.NewGauge(prometheus.GaugeOpts{
@@ -241,6 +245,7 @@ func (s *Server) registerMetric(item device) {
 				"name": strings.ReplaceAll(item.Name, " ", "_"),
 				"mac":  item.Id.Mac,
 				"ip":   item.Id.Ip,
+				"home": item.Home,
 			},
 		})
 	}
@@ -346,7 +351,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 
 	log.Println(fmt.Printf("New Device: %s", name))
 	if !*debug {
-		err := notifications.SendNotification(fmt.Sprintf("New Device in %s", newDevice.Home), newDevice.Manufacturer)
+		err := notifications.SendNotification(fmt.Sprintf("New Device in %s", newDevice.Home), newDevice.Manufacturer, newDevice.Home)
 		if err != nil {
 			return err
 		}
@@ -377,7 +382,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 			if *debug {
 				log.Printf("Notification: %s, %s", houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home))
 			} else {
-				err := notifications.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home))
+				err := notifications.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
 				if err != nil {
 					return err
 				}
@@ -407,7 +412,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 			if *debug {
 				log.Println("House no longer empty")
 			} else {
-				err := notifications.SendNotification(houseDevice.Home, "No longer Empty")
+				err := notifications.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
 				if err != nil {
 					return err
 				}
@@ -426,6 +431,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	return nil
 }
 
+// searchForOverlappingDevices Checks if reported device
 func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) error {
 	devices, err := s.readNetworkConfig()
 	if err != nil {
@@ -436,7 +442,7 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) error {
 	found := false
 	for _, v := range devices {
 		// on same home and same ip, report it as the one with a mac
-		if v.Id.Ip == in.Ip && v.Home == in.Home && v.Id.Ip != v.Id.Mac {
+		if v.Id.Ip == in.Ip && v.Home == in.Home && !strings.Contains(v.Id.Mac, ":") {
 			in.Mac = v.Id.Mac
 			found = true
 			continue
@@ -527,7 +533,7 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 					if err != nil {
 						log.Println(err)
 					}
-					err = notifications.SendNotification(device.Name, command.Command)
+					err = notifications.SendNotification(device.Name, command.Command, "devices")
 					if err != nil {
 						log.Println(err)
 					}
@@ -593,10 +599,17 @@ func (s *Server) iotStatusManager() error {
 			if *debug {
 				log.Printf("House (%s) is Empty(%v)", home, houseEmpty)
 			} else {
-				err := notifications.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home))
+				err := notifications.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
 				if err != nil {
 					log.Println(err)
 					return err
+				}
+				if strings.Contains(home, "wst") {
+					_, err = assistant.Call("Everyone's away")
+					if err != nil {
+						log.Println(err)
+						return err
+					}
 				}
 			}
 		}
@@ -617,7 +630,7 @@ func (s *Server) deviceManager() error {
 			device.Away = true
 			if device.Person {
 				if !*debug {
-					err := notifications.SendNotification(device.Name, "Has left the house")
+					err := notifications.SendNotification(device.Name, "Has left the house", device.Home)
 					if err != nil {
 						return nil
 					}
