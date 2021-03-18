@@ -328,7 +328,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		name = in.Mac
 	}
 	vendor := "unknown"
-	if in.Mac != in.Ip {
+	if in.Mac != in.Ip && strings.Contains(in.Mac, ":") {
 		macVendor, err := macvendor.GetManufacturer(in.Mac)
 		if macVendor != nil {
 			vendor = *macVendor
@@ -353,7 +353,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 
 	log.Println(fmt.Printf("New Device: %s", name))
 	if !*debug {
-		err := notifications.SendNotification(fmt.Sprintf("New Device in %s", newDevice.Home), newDevice.Manufacturer, newDevice.Home)
+		err := notifications.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
 		if err != nil {
 			return err
 		}
@@ -473,15 +473,12 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	clientFullIpString := clientIpFullIp.Addr.String()
 	clientIpV4 := clientFullIpString[:strings.Index(clientFullIpString, ":")]
 	// assuming mac is empty as its the clients own ip
-	if clientIpV4 == incoming.Ip && incoming.Mac == "" || clientIpV4 != incoming.Ip && incoming.Mac == "" {
+	if clientIpV4 == incoming.Ip && incoming.Mac == "" {
 		return &pb.Reply{Acknowledged: true}, nil
 	}
-	//if incoming.Mac == "" && incoming.Home != "" {
-	//	err, found := s.searchForOverlappingDevices(in)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//}
+	if incoming.Mac == "" && incoming.Home != "" {
+		incoming.Mac = fmt.Sprintf("%s/%s", incoming.Home, strings.ReplaceAll(in.Ip, ".", "_"))
+	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
