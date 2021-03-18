@@ -43,9 +43,9 @@ var metrics map[string]prometheus.Gauge
 
 //var gHouseEmpty map[string]bool
 
-var devicesPrefix string = "/devices/"
-var homePrefix string = "/homes/"
-var blesPrefix string = "/bles"
+var devicesPrefix = "/devices/"
+var homePrefix = "/homes/"
+var blesPrefix = "/bles"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -232,10 +232,11 @@ func (s *Server) registerMetric(item device) {
 			Name: "home_detector_device",
 			Help: "Device in home",
 			ConstLabels: prometheus.Labels{
-				"name": strings.ReplaceAll(item.Name, " ", "_"),
-				"mac":  item.Id.Mac,
-				"ip":   item.Id.Ip,
-				"home": item.Home,
+				"name":   strings.ReplaceAll(item.Name, " ", "_"),
+				"mac":    item.Id.Mac,
+				"ip":     item.Id.Ip,
+				"home":   item.Home,
+				"person": strconv.FormatBool(item.Person),
 			},
 		})
 		metrics[item.Name+"_lastseen"] = promauto.NewGauge(prometheus.GaugeOpts{
@@ -473,7 +474,10 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 			return nil, err
 		}
 	}
-	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Mac))
+	opts := []etcdv3.OpOption{
+		etcdv3.WithLimit(1),
+	}
+	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
 		return nil, err
 	}

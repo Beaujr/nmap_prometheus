@@ -63,16 +63,6 @@ func (s *Server) readNetworkConfig() (map[string]*device, error) {
 		}
 		strKey := string(key)
 		newKey := strings.ReplaceAll(strKey, devicesPrefix, "")
-		//if strings.Contains(strKey, fmt.Sprintf("/devices%s", dev.Id.Mac)) {
-		//	key2 := strings.ReplaceAll(strKey, "/devices", "/devices/")
-		//	s.etcdClient.Put(context.Background(), key2, string(val))
-		//	s.etcdClient.Delete(context.Background(), strKey)
-		//}
-		//if strings.Contains(strKey, "/devices//") {
-		//	key2 := strings.ReplaceAll(strKey, "//", "/")
-		//	s.etcdClient.Put(context.Background(), key2, string(val))
-		//	s.etcdClient.Delete(context.Background(), strKey)
-		//}
 		result[string(newKey)] = dev
 		i++
 	}
@@ -96,8 +86,14 @@ func (s *Server) readHomesConfig() (map[string]*bool, error) {
 		boolVal, _ := strconv.ParseBool(string(val))
 		if strings.Contains(string(key), "//") {
 			key2 := strings.ReplaceAll(string(key), "//", "")
-			s.etcdClient.Put(context.Background(), key2, string(val))
-			s.etcdClient.Delete(context.Background(), string(key))
+			_, err := s.etcdClient.Put(context.Background(), key2, string(val))
+			if err != nil {
+				return nil, err
+			}
+			_, err = s.etcdClient.Delete(context.Background(), string(key))
+			if err != nil {
+				return nil, err
+			}
 		}
 		result[string(newKey)] = &boolVal
 		i++
