@@ -106,6 +106,12 @@ else
   endif
 endif
 
+grpcUrl-device:
+	@ grpcurl -plaintext -d '{ "mac":":00:00:00:24:5c:f1", "ip":"192.168.1.2", "home":"aus"}' 192.168.1.190:50011 proto.HomeDetector.Address
+
+grpcUrl-ble:
+	@ grpcurl -plaintext -d '{ "mac":"00:00:00:24:5c:f1", "home":"wst"}' 192.168.1.190:50011 proto.HomeDetector.Ack
+
 docker-login: check-docker-credentials
 	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASS) $(REGISTRY)
 
