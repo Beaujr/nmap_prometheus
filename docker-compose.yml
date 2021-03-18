@@ -1,15 +1,42 @@
 version: '2'
 services:
   client:
-    image: beaujr/nmap_prometheus:client-latest
-    command: '-server=localhost:50051 -subnet=192.168.1.100-255'
+    build:
+      dockerfile: build/Dockerfile.client
+      context: .
+      args:
+        APP_TYPE: "client"
+        APP_NAME: nmap_prometheus
+    command: '-server=0.0.0.0:50051 -subnet=192.168.1.100-255'
     network_mode: host
   server:
-    image: beaujr/nmap_prometheus:server-latest
+    build:
+      dockerfile: build/Dockerfile
+      context: .
+      args:
+        APP_TYPE: "server"
+        APP_NAME: nmap_prometheus
     ports:
       - 50051:50051
       - 2112:2112
     volumes:
       - ./config:/config
-    command: '-debug=true'
+    command: '-debug=true -timeout=30 -etcdServers=0.0.0.0:2379'
+    network_mode: host
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.4.15
+    ports:
+      - 2379:2379
+      - 2380:2380
+    volumes:
+      - ./etcd-data:/etcd-data
+    command: '/usr/local/bin/etcd
+              --data-dir=/etcd-data --name node1
+              --initial-advertise-peer-urls http://0.0.0.0:2380 --listen-peer-urls http://0.0.0.0:2380
+              --advertise-client-urls http://0.0.0.0:2379 --listen-client-urls http://0.0.0.0:2379
+              --initial-cluster node1=http://0.0.0.0:2380
+              --auto-compaction-retention=2 --auto-compaction-mode=revision
+              --quota-backend-bytes=17179869184'
+    network_mode: host
+
 

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
+	"google.golang.org/grpc/peer"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -327,7 +328,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		name = in.Mac
 	}
 	vendor := "unknown"
-	if in.Mac != in.Ip {
+	if in.Mac != in.Ip && strings.Contains(in.Mac, ":") {
 		macVendor, err := macvendor.GetManufacturer(in.Mac)
 		if macVendor != nil {
 			vendor = *macVendor
@@ -352,7 +353,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 
 	log.Println(fmt.Printf("New Device: %s", name))
 	if !*debug {
-		err := notifications.SendNotification(fmt.Sprintf("New Device in %s", newDevice.Home), newDevice.Manufacturer, newDevice.Home)
+		err := notifications.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
 		if err != nil {
 			return err
 		}
@@ -433,46 +434,50 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 }
 
 // searchForOverlappingDevices Checks if reported device
-func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) error {
+func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, error) {
 	devices, err := s.readNetworkConfig()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	in.Mac = in.Ip
 
 	found := false
 	for _, v := range devices {
 		// on same home and same ip, report it as the one with a mac
-		if v.Id.Ip == in.Ip && v.Home == in.Home && !strings.Contains(v.Id.Mac, ":") {
+		if v.Id.Ip == in.Ip && v.Home == in.Home && strings.Contains(v.Id.Mac, ":") {
 			in.Mac = v.Id.Mac
 			found = true
-			continue
+			return &found, err
 		}
 	}
 
-	if found {
-		etcdKey := strings.ReplaceAll(strings.ReplaceAll(in.Ip, ".", "_"), ":", "_")
-		_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, etcdKey))
-		if err != nil {
-			log.Println(err.Error())
-		}
-		_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Ip))
-		if err != nil {
-			log.Println(err.Error())
-		}
-	}
+	//if found {
+	//	etcdKey := strings.ReplaceAll(strings.ReplaceAll(in.Ip, ".", "_"), ":", "_")
+	//	_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, etcdKey))
+	//	if err != nil {
+	//		log.Println(err.Error())
+	//	}
+	//	_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Ip))
+	//	if err != nil {
+	//		log.Println(err.Error())
+	//	}
+	//}
 
-	return nil
+	return &found, err
 }
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
+	clientIpFullIp, _ := peer.FromContext(ctx)
+	clientFullIpString := clientIpFullIp.Addr.String()
+	clientIpV4 := clientFullIpString[:strings.Index(clientFullIpString, ":")]
+	// assuming mac is empty as its the clients own ip
+	if clientIpV4 == incoming.Ip && incoming.Mac == "" {
+		return &pb.Reply{Acknowledged: true}, nil
+	}
 	if incoming.Mac == "" && incoming.Home != "" {
-		err := s.searchForOverlappingDevices(in)
-		if err != nil {
-			return nil, err
-		}
+		incoming.Mac = fmt.Sprintf("%s/%s", incoming.Home, strings.ReplaceAll(in.Ip, ".", "_"))
 	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
