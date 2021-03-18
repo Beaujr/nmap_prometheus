@@ -42,11 +42,13 @@ var commandQueue = []*TimedCommand{}
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
 
+//var cqMetrics map[string]prometheus.Gauge
+
 //var gHouseEmpty map[string]bool
 
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
-var blesPrefix = "/bles"
+var blesPrefix = "/bles/"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -87,15 +89,22 @@ func writeConfig(data []byte, filename string) error {
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
+	//cqMetrics = make(map[string]prometheus.Gauge)
+	metrics = make(map[string]prometheus.Gauge)
 
 	server := &Server{etcdClient: etcdClient}
 	_, err := server.readNetworkConfig()
 	if err != nil {
 		log.Println(err)
 	}
+	// importConfig to etcd
+	bleDevices, _ := readBleConfig(*bleConfigFile)
+	for _, item := range bleDevices {
+		_ = server.writeBleDevice(item)
+	}
+
 	// Bluetooth
-	savedBle, err := readBleConfig(*bleConfigFile)
-	bleDevices = savedBle
+	_, err = server.readBleConfig()
 	if err != nil {
 		log.Println(err)
 	}
@@ -119,6 +128,13 @@ func NewServer() HomeManager {
 
 	c.AddFunc("*/10 * * * * *", func() {
 		for _, tc := range commandQueue {
+			if metrics[tc.Owner] != nil {
+				if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
+					metrics[tc.Owner].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
+				} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
+					metrics[tc.Owner].Set(float64(0))
+				}
+			}
 			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
 				tc.Executed = true
 				if !*debug {
@@ -136,8 +152,6 @@ func NewServer() HomeManager {
 			}
 		}
 	})
-
-	metrics = make(map[string]prometheus.Gauge)
 
 	knowDevices, err := server.readNetworkConfig()
 	if err != nil {
@@ -377,6 +391,24 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 		houseDevice.Id.Ip = incoming.Ip
 	}
 
+	if incoming.Ip != houseDevice.Id.Ip {
+		houseDevice.Id.Ip = incoming.Ip
+	}
+
+	if incoming.Home != houseDevice.Home {
+		houseDevice.Home = incoming.Home
+		message := fmt.Sprintf("%s has moved to %s", houseDevice.Name, houseDevice.Home)
+		//delete(metrics, houseDevice.Name)
+		if *debug {
+			log.Println(message)
+		} else {
+			err := notifications.SendNotification(houseDevice.Home, message, houseDevice.Home)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	timeAway := s.deviceDetectState(houseDevice.LastSeen)
 	if timeAway > *timeAwaySeconds {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
@@ -440,7 +472,6 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, erro
 		return nil, err
 	}
 	in.Mac = in.Ip
-
 	found := false
 	for _, v := range devices {
 		// on same home and same ip, report it as the one with a mac
@@ -510,15 +541,21 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
-	newDevice := true
-	device := &bleDevice{}
-	for _, houseDevice := range bleDevices {
-		if in.Mac == houseDevice.Id {
-			newDevice = false
-			device = houseDevice
-		}
+	opts := []etcdv3.OpOption{
+		etcdv3.WithLimit(1),
 	}
-	if !newDevice {
+	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", blesPrefix, in.Mac), opts...)
+	if err != nil {
+		return nil, err
+	}
+	if item.Count == 1 {
+		strDevice := item.Kvs[0].Value
+		var device *bleDevice
+		err = yaml.Unmarshal(strDevice, &device)
+		if err != nil {
+			return nil, err
+		}
+
 		lastSeen := s.deviceDetectState(device.LastSeen)
 		device.LastSeen = int64(time.Now().Unix())
 		err := writeBleDevices(bleDevices)
@@ -531,10 +568,23 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 				if command.Timeout > 0 {
 					// Create a queue
 					commandQueue = append(commandQueue, &TimedCommand{
+						Owner:     device.Id,
 						Command:   command.TimeoutCommand,
 						ExecuteAt: int64(time.Now().Unix()) + command.Timeout,
 						Executed:  false,
 					})
+
+					if metrics[device.Id] == nil {
+						metrics[device.Id] = promauto.NewGauge(prometheus.GaugeOpts{
+							Name: "home_detector_ble_device",
+							Help: "BleDevice in home",
+							ConstLabels: prometheus.Labels{
+								"name":    strings.ReplaceAll(device.Id, " ", "_"),
+								"command": command.TimeoutCommand,
+							},
+						})
+					}
+					metrics[device.Id].Set(float64(command.Timeout))
 					fmt.Println(&commandQueue)
 				}
 				if !*debug {
@@ -550,7 +600,7 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 			}
 		}
 	}
-	return &pb.Reply{Acknowledged: !newDevice}, nil
+	return &pb.Reply{Acknowledged: item.Count == 1}, nil
 }
 
 func (s *Server) httpHealthCheck(url string) bool {

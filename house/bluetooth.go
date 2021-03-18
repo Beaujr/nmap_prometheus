@@ -1,11 +1,14 @@
 package house
 
 import (
+	"context"
 	"fmt"
+	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 )
 
 type bleDevice struct {
@@ -24,6 +27,7 @@ type command struct {
 
 // TimedCommand executes a command now and a reverse command in now + executeat seconds
 type TimedCommand struct {
+	Owner     string `json:"mac",yaml:"mac"`
 	Command   string `json:"command",yaml:"command"`
 	ExecuteAt int64  `json:"executeat",yaml:"executeat"`
 	Executed  bool   `json:"executed",yaml:"executed"`
@@ -60,6 +64,33 @@ func readBleConfig(filename string) ([]*bleDevice, error) {
 	return result, nil
 }
 
+func (s *Server) readBleConfig() (map[string]*bleDevice, error) {
+	var result map[string]*bleDevice
+	result = make(map[string]*bleDevice)
+	items, err := s.etcdClient.Get(context.Background(), blesPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return result, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		val := items.Kvs[i].Value
+		key := items.Kvs[i].Key
+		var dev *bleDevice
+		err = yaml.Unmarshal(val, &dev)
+		if err != nil {
+			return nil, err
+		}
+		strKey := string(key)
+		newKey := strings.ReplaceAll(strKey, blesPrefix, "")
+		result[string(newKey)] = dev
+		i++
+	}
+	return result, nil
+}
+
 func uniqueBle(devices []*bleDevice) ([]*bleDevice, error) {
 	keys := make(map[string]bool)
 	list := []*bleDevice{}
@@ -74,4 +105,14 @@ func uniqueBle(devices []*bleDevice) ([]*bleDevice, error) {
 		return nil, err
 	}
 	return list, nil
+}
+func (s *Server) writeBleDevice(item *bleDevice) error {
+	d1, err := yaml.Marshal(item)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	key := fmt.Sprintf("%s%s", blesPrefix, item.Id)
+	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	return err
 }
