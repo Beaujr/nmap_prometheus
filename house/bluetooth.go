@@ -116,3 +116,47 @@ func (s *Server) writeBleDevice(item *bleDevice) error {
 	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
+
+func (s *Server) writeTc(item *TimedCommand) error {
+	d1, err := yaml.Marshal(item)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	key := fmt.Sprintf("%s%s", tcPrefix, item.Owner)
+	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	return err
+}
+
+func (s *Server) deleteTc(item *TimedCommand) error {
+	key := fmt.Sprintf("%s%s", tcPrefix, item.Owner)
+	_, err := s.etcdClient.Delete(context.Background(), key)
+	return err
+}
+
+func (s *Server) getTc() (map[string]*TimedCommand, error) {
+	var result map[string]*TimedCommand
+	result = make(map[string]*TimedCommand)
+	items, err := s.etcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return result, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		val := items.Kvs[i].Value
+		key := items.Kvs[i].Key
+		var dev *TimedCommand
+		err = yaml.Unmarshal(val, &dev)
+		if err != nil {
+			return nil, err
+		}
+		strKey := string(key)
+		newKey := strings.ReplaceAll(strKey, tcPrefix, "")
+		result[string(newKey)] = dev
+		i++
+	}
+	return result, nil
+}
