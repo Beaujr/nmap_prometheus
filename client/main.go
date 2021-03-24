@@ -22,11 +22,11 @@ func main() {
 	for !*ble {
 		addresses, err := network.Scan(*subnet)
 		if err != nil {
-			log.Fatalf("unable to run nmap scan: %v", err)
+			log.Printf("unable to run nmap scan: %v", err)
 		}
 		err = c.Address(addresses)
 		if err != nil {
-			log.Panic(err)
+			log.Printf("unable to run GRPC report: %v", err)
 		}
 	}
 

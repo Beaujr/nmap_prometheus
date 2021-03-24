@@ -38,17 +38,14 @@ var etcdServers = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separa
 var debug = flag.Bool("debug", false, "Debug mode")
 
 var bleDevices = []*bleDevice{}
-var commandQueue = []*TimedCommand{}
+
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
-
-//var cqMetrics map[string]prometheus.Gauge
-
-//var gHouseEmpty map[string]bool
 
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
 var blesPrefix = "/bles/"
+var tcPrefix = "/cq/"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -127,7 +124,12 @@ func NewServer() HomeManager {
 	})
 
 	c.AddFunc("*/10 * * * * *", func() {
-		for _, tc := range commandQueue {
+		tcs, err := server.getTc()
+		if err != nil {
+			log.Println(err)
+		}
+
+		for _, tc := range tcs {
 			if metrics[tc.Owner] != nil {
 				if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
 					metrics[tc.Owner].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
@@ -148,6 +150,10 @@ func NewServer() HomeManager {
 					}
 				} else {
 					log.Printf("Scheduled Task: %s", tc.Command)
+				}
+				err := server.deleteTc(tc)
+				if err != nil {
+					log.Println(err)
 				}
 			}
 		}
@@ -567,13 +573,12 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 			for _, command := range device.Commands {
 				if command.Timeout > 0 {
 					// Create a queue
-					commandQueue = append(commandQueue, &TimedCommand{
+					tc := &TimedCommand{
 						Owner:     device.Id,
 						Command:   command.TimeoutCommand,
 						ExecuteAt: int64(time.Now().Unix()) + command.Timeout,
 						Executed:  false,
-					})
-
+					}
 					if metrics[device.Id] == nil {
 						metrics[device.Id] = promauto.NewGauge(prometheus.GaugeOpts{
 							Name: "home_detector_ble_device",
@@ -585,7 +590,10 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 						})
 					}
 					metrics[device.Id].Set(float64(command.Timeout))
-					fmt.Println(&commandQueue)
+					err := s.writeTc(tc)
+					if err != nil {
+						log.Println(err)
+					}
 				}
 				if !*debug {
 					_, err := s.callAssistant(command.Command)
