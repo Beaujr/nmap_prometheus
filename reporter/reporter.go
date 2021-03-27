@@ -47,7 +47,7 @@ func NewReporter(address string, home string) Reporter {
 	return Reporter{home: home, conn: conn}
 }
 
-// Address reports pb.AddressRequest to the GRPC server
+// Addresses reports pb.AddressesRequest to the GRPC server
 func (r *Reporter) Addresses(items []*pb.AddressRequest) error {
 	gAddr := pb.AddressesRequest{Addresses: items}
 	c := pb.NewHomeDetectorClient(r.conn)
@@ -66,7 +66,7 @@ func (r *Reporter) Addresses(items []*pb.AddressRequest) error {
 	return nil
 }
 
-// Addresses reports pb.AddressesRequest to the GRPC server
+// Address reports pb.AddressRequest to the GRPC server
 func (r *Reporter) Address(items []*pb.AddressRequest) error {
 	for _, item := range items {
 		c := pb.NewHomeDetectorClient(r.conn)

@@ -548,7 +548,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
-// Address Handler for receiving IP/MAC requests
+// Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
 	for _, addr := range in.Addresses {
 		_, err := s.Address(ctx, addr)
