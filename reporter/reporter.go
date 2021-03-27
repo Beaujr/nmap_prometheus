@@ -85,7 +85,7 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 			return err
 		}
 		c := pb.NewHomeDetectorClient(conn)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*(time.Duration(*timeout)))
 		defer cancel()
 		item.Home = r.home
 		response, err := c.Address(ctx, item)
@@ -116,7 +116,7 @@ func (r *Reporter) Bles(macs []*string) error {
 			log.Fatalf("did not connect: %v", err)
 		}
 		c := pb.NewHomeDetectorClient(conn)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*(time.Duration(*timeout)))
 		defer cancel()
 		response, err := c.Ack(ctx, &pb.BleRequest{Mac: *mac, Home: r.home})
 		if err != nil {
