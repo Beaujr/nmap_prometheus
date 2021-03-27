@@ -13,6 +13,7 @@ var (
 	address = flag.String("server", "192.168.1.190:50051", "NMAP Server")
 	ble     = flag.Bool("ble", false, "Boolean for BLE scanning")
 	home    = flag.String("home", "default", "Agent Location eg: Home, Dads house")
+	bulk    = flag.Int("bulk", 10, "When to upload in bulk vs singular")
 )
 
 func main() {
@@ -20,9 +21,17 @@ func main() {
 	flag.Parse()
 	c := reporter.NewReporter(*address, *home)
 	for !*ble {
-		addresses, err := network.Scan(*subnet)
+		addresses, err := network.Scan(*subnet, *home)
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
+		}
+		if len(addresses) > *bulk {
+			log.Printf("Bulk GRPC report: %d", len(addresses))
+			err = c.Addresses(addresses)
+			if err != nil {
+				log.Printf("unable to run GRPC report: %v", err)
+			}
+			continue
 		}
 		err = c.Address(addresses)
 		if err != nil {

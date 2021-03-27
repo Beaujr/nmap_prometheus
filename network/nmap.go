@@ -9,7 +9,7 @@ import (
 )
 
 // Scan executes the nmap binary and parses the result
-func Scan(subnet string) ([]pb.AddressRequest, error) {
+func Scan(subnet string, home string) ([]*pb.AddressRequest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -35,7 +35,7 @@ func Scan(subnet string) ([]pb.AddressRequest, error) {
 	// Use the results to print an example output
 
 	// Use the results to print an example output
-	addresses := make([]pb.AddressRequest, 0)
+	addresses := make([]*pb.AddressRequest, 0)
 	for _, host := range result.Hosts {
 		item := pb.AddressRequest{}
 		for _, address := range host.Addresses {
@@ -45,7 +45,8 @@ func Scan(subnet string) ([]pb.AddressRequest, error) {
 				item.Mac = address.Addr
 			}
 		}
-		addresses = append(addresses, item)
+		item.Home = home
+		addresses = append(addresses, &item)
 	}
 	return addresses, nil
 }

@@ -9,6 +9,7 @@ service HomeDetector {
   // Sends a greeting
   rpc Ack (BleRequest) returns (Reply) {}
   rpc Address (AddressRequest) returns (Reply) {}
+  rpc Addresses (AddressesRequest) returns (Reply) {}
 }
 
 // The request message containing the user's name.
@@ -22,6 +23,10 @@ message AddressRequest {
   string ip = 1;
   string mac = 2;
   string home = 3;
+}
+
+message AddressesRequest {
+  repeated AddressRequest addresses = 1;
 }
 
 // The response message containing the greetings

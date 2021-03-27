@@ -31,11 +31,14 @@ type networkId struct {
 }
 
 //IOT iotDevices
-var timeAwaySeconds = flag.Int64("timeout", 300, "")
-var networkConfigFile = flag.String("config", "config/devices.yaml", "Path to config file")
-var bleConfigFile = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
-var etcdServers = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
-var debug = flag.Bool("debug", false, "Debug mode")
+var (
+	timeAwaySeconds    = flag.Int64("timeout", 300, "")
+	bleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
+	networkConfigFile  = flag.String("config", "config/devices.yaml", "Path to config file")
+	bleConfigFile      = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
+	etcdServers        = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
+	debug              = flag.Bool("debug", false, "Debug mode")
+)
 
 var bleDevices = []*bleDevice{}
 
@@ -130,11 +133,11 @@ func NewServer() HomeManager {
 		}
 
 		for _, tc := range tcs {
-			if metrics[tc.Owner] != nil {
+			if metrics[tc.Id] != nil {
 				if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
-					metrics[tc.Owner].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
+					metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
 				} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
-					metrics[tc.Owner].Set(float64(0))
+					metrics[tc.Id].Set(float64(0))
 				}
 			}
 			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
@@ -545,6 +548,17 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
+// Addresses Handler for receiving array of IP/MAC requests
+func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
+	for _, addr := range in.Addresses {
+		_, err := s.Address(ctx, addr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &pb.Reply{Acknowledged: true}, nil
+}
+
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
 	opts := []etcdv3.OpOption{
@@ -564,45 +578,51 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 
 		lastSeen := s.deviceDetectState(device.LastSeen)
 		device.LastSeen = int64(time.Now().Unix())
-		err := writeBleDevices(bleDevices)
+		err := s.writeBleDevice(device)
 		if err != nil {
 			log.Printf("Error updating BLE device: %s", device.Id)
 		}
-		if lastSeen > *timeAwaySeconds {
+		if lastSeen > *bleTimeAwaySeconds {
 			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
 			for _, command := range device.Commands {
 				if command.Timeout > 0 {
 					// Create a queue
 					tc := &TimedCommand{
 						Owner:     device.Id,
-						Command:   command.TimeoutCommand,
+						Command:   command.Command,
 						ExecuteAt: int64(time.Now().Unix()) + command.Timeout,
 						Executed:  false,
+						Id:        fmt.Sprintf("%s%v", device.Id, command.Id),
 					}
-					if metrics[device.Id] == nil {
-						metrics[device.Id] = promauto.NewGauge(prometheus.GaugeOpts{
+					if metrics[tc.Id] == nil {
+						metrics[tc.Id] = promauto.NewGauge(prometheus.GaugeOpts{
 							Name: "home_detector_ble_device",
 							Help: "BleDevice in home",
 							ConstLabels: prometheus.Labels{
-								"name":    strings.ReplaceAll(device.Id, " ", "_"),
-								"command": command.TimeoutCommand,
+								"name":    strings.ReplaceAll(tc.Id, " ", "_"),
+								"command": tc.Command,
 							},
 						})
 					}
-					metrics[device.Id].Set(float64(command.Timeout))
+					metrics[tc.Id].Set(float64(command.Timeout))
 					err := s.writeTc(tc)
 					if err != nil {
 						log.Println(err)
 					}
 				}
-				if !*debug {
-					_, err := s.callAssistant(command.Command)
-					if err != nil {
-						log.Println(err)
+				if command.Timeout == 0 {
+					if !*debug {
+						_, err := s.callAssistant(command.Command)
+						if err != nil {
+							log.Println(err)
+						}
+						err = notifications.SendNotification(device.Name, command.Command, "devices")
+						if err != nil {
+							log.Println(err)
+						}
 					}
-					err = notifications.SendNotification(device.Name, command.Command, "devices")
-					if err != nil {
-						log.Println(err)
+					if *debug {
+						log.Println(command.Command)
 					}
 				}
 			}
