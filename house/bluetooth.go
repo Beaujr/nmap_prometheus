@@ -20,9 +20,9 @@ type bleDevice struct {
 }
 
 type command struct {
-	Timeout        int64  `json:"timeout",yaml:"timeout"`
-	Command        string `json:"command",yaml:"command"`
-	TimeoutCommand string `json:"timeoutcommand",yaml:"timeoutcommand"`
+	Timeout int64  `json:"timeout",yaml:"timeout"`
+	Command string `json:"command",yaml:"command"`
+	Id      string `json:"id",yaml:"id"`
 }
 
 // TimedCommand executes a command now and a reverse command in now + executeat seconds
@@ -31,6 +31,7 @@ type TimedCommand struct {
 	Command   string `json:"command",yaml:"command"`
 	ExecuteAt int64  `json:"executeat",yaml:"executeat"`
 	Executed  bool   `json:"executed",yaml:"executed"`
+	Id        string `json:"id",yaml:"id"`
 }
 
 func writeBleDevices(devices []*bleDevice) error {
@@ -123,13 +124,13 @@ func (s *Server) writeTc(item *TimedCommand) error {
 		log.Fatalf(err.Error())
 	}
 
-	key := fmt.Sprintf("%s%s", tcPrefix, item.Owner)
+	key := fmt.Sprintf("%s%s", tcPrefix, item.Id)
 	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
 
 func (s *Server) deleteTc(item *TimedCommand) error {
-	key := fmt.Sprintf("%s%s", tcPrefix, item.Owner)
+	key := fmt.Sprintf("%s%s", tcPrefix, item.Id)
 	_, err := s.etcdClient.Delete(context.Background(), key)
 	return err
 }

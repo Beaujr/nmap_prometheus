@@ -20,6 +20,7 @@ type HomeDetectorClient interface {
 	// Sends a greeting
 	Ack(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error)
 	Address(ctx context.Context, in *AddressRequest, opts ...grpc.CallOption) (*Reply, error)
+	Addresses(ctx context.Context, in *AddressesRequest, opts ...grpc.CallOption) (*Reply, error)
 }
 
 type homeDetectorClient struct {
@@ -48,6 +49,15 @@ func (c *homeDetectorClient) Address(ctx context.Context, in *AddressRequest, op
 	return out, nil
 }
 
+func (c *homeDetectorClient) Addresses(ctx context.Context, in *AddressesRequest, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/Addresses", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HomeDetectorServer is the server API for HomeDetector service.
 // All implementations must embed UnimplementedHomeDetectorServer
 // for forward compatibility
@@ -55,6 +65,7 @@ type HomeDetectorServer interface {
 	// Sends a greeting
 	Ack(context.Context, *BleRequest) (*Reply, error)
 	Address(context.Context, *AddressRequest) (*Reply, error)
+	Addresses(context.Context, *AddressesRequest) (*Reply, error)
 	mustEmbedUnimplementedHomeDetectorServer()
 }
 
@@ -67,6 +78,9 @@ func (UnimplementedHomeDetectorServer) Ack(context.Context, *BleRequest) (*Reply
 }
 func (UnimplementedHomeDetectorServer) Address(context.Context, *AddressRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Address not implemented")
+}
+func (UnimplementedHomeDetectorServer) Addresses(context.Context, *AddressesRequest) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Addresses not implemented")
 }
 func (UnimplementedHomeDetectorServer) mustEmbedUnimplementedHomeDetectorServer() {}
 
@@ -117,6 +131,24 @@ func _HomeDetector_Address_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HomeDetector_Addresses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddressesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).Addresses(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/Addresses",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).Addresses(ctx, req.(*AddressesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.HomeDetector",
 	HandlerType: (*HomeDetectorServer)(nil),
@@ -128,6 +160,10 @@ var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Address",
 			Handler:    _HomeDetector_Address_Handler,
+		},
+		{
+			MethodName: "Addresses",
+			Handler:    _HomeDetector_Addresses_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
