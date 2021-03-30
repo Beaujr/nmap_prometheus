@@ -38,6 +38,7 @@ var (
 	bleConfigFile      = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
 	etcdServers        = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
 	debug              = flag.Bool("debug", false, "Debug mode")
+	cqEnabled          = flag.Bool("cq", false, "Command Queue Enabled")
 )
 
 var bleDevices = []*bleDevice{}
@@ -125,42 +126,43 @@ func NewServer() HomeManager {
 			server.registerMetric(*val)
 		}
 	})
-
-	c.AddFunc("*/10 * * * * *", func() {
-		tcs, err := server.getTc()
-		if err != nil {
-			log.Println(err)
-		}
-
-		for _, tc := range tcs {
-			if metrics[tc.Id] != nil {
-				if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
-					metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
-				} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
-					metrics[tc.Id].Set(float64(0))
-				}
+	if *cqEnabled {
+		c.AddFunc("*/10 * * * * *", func() {
+			tcs, err := server.getTc()
+			if err != nil {
+				log.Println(err)
 			}
-			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
-				tc.Executed = true
-				if !*debug {
-					_, err := server.callAssistant(tc.Command)
+
+			for _, tc := range tcs {
+				if metrics[tc.Id] != nil {
+					if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
+						metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
+					} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
+						metrics[tc.Id].Set(float64(0))
+					}
+				}
+				if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
+					tc.Executed = true
+					if !*debug {
+						_, err := server.callAssistant(tc.Command)
+						if err != nil {
+							log.Println(err)
+						}
+						err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
+						if err != nil {
+							log.Println(err)
+						}
+					} else {
+						log.Printf("Scheduled Task: %s", tc.Command)
+					}
+					err := server.deleteTc(tc)
 					if err != nil {
 						log.Println(err)
 					}
-					err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
-					if err != nil {
-						log.Println(err)
-					}
-				} else {
-					log.Printf("Scheduled Task: %s", tc.Command)
-				}
-				err := server.deleteTc(tc)
-				if err != nil {
-					log.Println(err)
 				}
 			}
-		}
-	})
+		})
+	}
 
 	knowDevices, err := server.readNetworkConfig()
 	if err != nil {
