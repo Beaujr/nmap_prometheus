@@ -45,7 +45,6 @@ var bleDevices = []*bleDevice{}
 
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
-
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
 var blesPrefix = "/bles/"
@@ -510,6 +509,22 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, erro
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
+	promMetric := "grpc_address"
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": "Address",
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(1)
+	return s.processIncomingAddress(ctx, in)
+}
+
+func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
 	clientIpFullIp, _ := peer.FromContext(ctx)
 	clientFullIpString := clientIpFullIp.Addr.String()
@@ -552,8 +567,20 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 // Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
+	promMetric := "grpc_addresses"
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": "Addresses",
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(1)
 	for _, addr := range in.Addresses {
-		_, err := s.Address(ctx, addr)
+		_, err := s.processIncomingAddress(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -563,6 +590,18 @@ func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Re
 
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
+	promMetric := "grpc_ble"
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": "Ack",
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(1)
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
