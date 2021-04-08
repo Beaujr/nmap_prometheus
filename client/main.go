@@ -7,6 +7,7 @@ import (
 	"github.com/beaujr/nmap_prometheus/reporter"
 	"log"
 	"net"
+	"strings"
 )
 
 var (
@@ -39,8 +40,7 @@ func main() {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			localAddresses[ip.String()] = i.HardwareAddr.String()
-			// process IP address
+			localAddresses[ip.String()] = strings.ToUpper(i.HardwareAddr.String())
 		}
 	}
 	for !*ble {

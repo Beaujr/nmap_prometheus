@@ -89,7 +89,6 @@ func writeConfig(data []byte, filename string) error {
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
-	//cqMetrics = make(map[string]prometheus.Gauge)
 	metrics = make(map[string]prometheus.Gauge)
 
 	server := &Server{etcdClient: etcdClient}
