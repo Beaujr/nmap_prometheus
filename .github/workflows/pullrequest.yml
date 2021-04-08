@@ -39,7 +39,7 @@ jobs:
         file: bin/beaujr/nmap_prometheus-*
         file_glob: true
         asset_name: Latest
-        tag: Latest
+        tag: ${{ github.ref }}
         overwrite: true
         body: "Latest Release"
     - name: Available platforms
