@@ -9,7 +9,7 @@ import (
 )
 
 // Scan executes the nmap binary and parses the result
-func Scan(subnet string, home string) ([]*pb.AddressRequest, error) {
+func Scan(subnet string, home string, localAddrs map[string]string) ([]*pb.AddressRequest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -41,6 +41,10 @@ func Scan(subnet string, home string) ([]*pb.AddressRequest, error) {
 		for _, address := range host.Addresses {
 			if address.AddrType == "ipv4" {
 				item.Ip = address.Addr
+				if val, ok := localAddrs[address.Addr]; ok {
+					item.Mac = val
+				}
+				continue
 			} else {
 				item.Mac = address.Addr
 			}

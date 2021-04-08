@@ -17,7 +17,7 @@ var netInterface = flag.String("interface", "", "Interface to bind to")
 
 // Reporter is the struct to handle GRP Comms
 type Reporter struct {
-	home string
+	Home string
 	conn *grpc.ClientConn
 }
 
@@ -44,7 +44,7 @@ func NewReporter(address string, home string) Reporter {
 	if err != nil {
 		log.Print(err)
 	}
-	return Reporter{home: home, conn: conn}
+	return Reporter{Home: home, conn: conn}
 }
 
 // Addresses reports pb.AddressesRequest to the GRPC server
@@ -72,7 +72,7 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 		c := pb.NewHomeDetectorClient(r.conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*(time.Duration(*timeout)))
 		defer cancel()
-		item.Home = r.home
+		item.Home = r.Home
 		response, err := c.Address(ctx, item)
 		if err != nil {
 			grpcError := status.FromContextError(err)
@@ -93,7 +93,7 @@ func (r *Reporter) Bles(macs []*string) error {
 		c := pb.NewHomeDetectorClient(r.conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*(time.Duration(*timeout)))
 		defer cancel()
-		response, err := c.Ack(ctx, &pb.BleRequest{Mac: *mac, Home: r.home})
+		response, err := c.Ack(ctx, &pb.BleRequest{Mac: *mac, Home: r.Home})
 		if err != nil {
 			return err
 		}

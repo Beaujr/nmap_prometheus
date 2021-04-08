@@ -6,6 +6,7 @@ import (
 	"github.com/beaujr/nmap_prometheus/network"
 	"github.com/beaujr/nmap_prometheus/reporter"
 	"log"
+	"net"
 )
 
 var (
@@ -20,8 +21,30 @@ func main() {
 	log.Println("Application Starting")
 	flag.Parse()
 	c := reporter.NewReporter(*address, *home)
+	localAddresses := make(map[string]string)
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		log.Println(err)
+	}
+	// handle err
+	for _, i := range ifaces {
+		addrs, _ := i.Addrs()
+		// handle err
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			localAddresses[ip.String()] = i.HardwareAddr.String()
+			// process IP address
+		}
+	}
 	for !*ble {
-		addresses, err := network.Scan(*subnet, *home)
+		addresses, err := network.Scan(*subnet, *home, localAddresses)
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
 		}
