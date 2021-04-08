@@ -45,7 +45,6 @@ var bleDevices = []*bleDevice{}
 
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
-
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
 var blesPrefix = "/bles/"
@@ -510,6 +509,22 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, erro
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
+	promMetric := "grpc_address"
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": "Address",
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(1)
+	return s.processIncomingAddress(ctx, in)
+}
+
+func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
 	clientIpFullIp, _ := peer.FromContext(ctx)
 	clientFullIpString := clientIpFullIp.Addr.String()
@@ -552,8 +567,20 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 // Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
+	promMetric := "grpc_addresses"
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": "Addresses",
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(1)
 	for _, addr := range in.Addresses {
-		_, err := s.Address(ctx, addr)
+		_, err := s.processIncomingAddress(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -561,15 +588,15 @@ func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Re
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
-// Ack for bluetooth reported MAC addresses
-func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
+func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleRequest) (*bool, error) {
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", blesPrefix, in.Mac), opts...)
+	item, err := s.etcdClient.Get(ctx, fmt.Sprintf("%s%s", blesPrefix, in.Mac), opts...)
 	if err != nil {
 		return nil, err
 	}
+	found := item.Count == 1
 	if item.Count == 1 {
 		strDevice := item.Kvs[0].Value
 		var device *bleDevice
@@ -616,11 +643,11 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 					if !*debug {
 						_, err := s.callAssistant(command.Command)
 						if err != nil {
-							log.Println(err)
+							return nil, err
 						}
 						err = notifications.SendNotification(device.Name, command.Command, "devices")
 						if err != nil {
-							log.Println(err)
+							return nil, err
 						}
 					}
 					if *debug {
@@ -630,7 +657,28 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 			}
 		}
 	}
-	return &pb.Reply{Acknowledged: item.Count == 1}, nil
+	return &found, nil
+}
+
+// Ack for bluetooth reported MAC addresses
+func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
+	promMetric := "grpc_ble"
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": "Ack",
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(1)
+	ack, err := s.processIncomingBleAddress(ctx, in)
+	if err != nil {
+		log.Println(err)
+	}
+	return &pb.Reply{Acknowledged: *ack}, nil
 }
 
 func (s *Server) httpHealthCheck(url string) bool {
