@@ -20,17 +20,28 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: 1.15.x
-    - name: Build AMD64 Binary
-      run: make build GOARCH=amd64 GOOS=linux
+    - name: Build amd64 Binary
+      run: make build GOARCH=amd64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_amd64
+    - name: Build arm64 Binary
+      run: make build GOARCH=arm64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm64
+    - name: Build arm Binary
+      run: make build GOARCH=arm GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm
+    - name: Build amd64 Binary
+      run: make build GOARCH=amd64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_amd64
+    - name: Build arm64 Binary
+      run: make build GOARCH=arm64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm64
+    - name: Build arm Binary
+      run: make build GOARCH=arm APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: bin/beaujr/nmap_prometheus-client
+        file: bin/beaujr/nmap_prometheus-*
+        file_glob: true
         asset_name: Latest
-        tag: amd64
+        tag: Latest
         overwrite: true
-        body: "AMD64 Client Release"
+        body: "Latest Release"
     - name: Available platforms
       run: echo ${{ steps.buildx.outputs.platforms }}
     - name: Docker Login
