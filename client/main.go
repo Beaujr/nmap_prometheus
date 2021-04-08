@@ -21,7 +21,7 @@ func main() {
 	log.Println("Application Starting")
 	flag.Parse()
 	c := reporter.NewReporter(*address, *home)
-	localAddresses := make(map[string]bool)
+	localAddresses := make(map[string]string)
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		log.Println(err)
@@ -30,6 +30,7 @@ func main() {
 	for _, i := range ifaces {
 		addrs, _ := i.Addrs()
 		// handle err
+
 		for _, addr := range addrs {
 			var ip net.IP
 			switch v := addr.(type) {
@@ -38,7 +39,7 @@ func main() {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			localAddresses[ip.String()] = true
+			localAddresses[ip.String()] = i.HardwareAddr.String()
 			// process IP address
 		}
 	}
