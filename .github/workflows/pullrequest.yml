@@ -16,6 +16,30 @@ jobs:
       id: buildx
       with:
         install: true
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.15.x
+    - name: Build AMD64 Binary
+      run: make build GOARCH=amd64 GOOS=linux
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: target/release/mything
+        asset_name: bin/beaujr/nmap_prometheus-client
+        tag: amd64
+        overwrite: true
+        body: "AMD64 Client Release"
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: target/release/mything
+        asset_name: bin/beaujr/nmap_prometheus-client
+        tag: amd64
+        overwrite: true
+        body: "AMD64 Client Release"
     - name: Available platforms
       run: echo ${{ steps.buildx.outputs.platforms }}
     - name: Docker Login
