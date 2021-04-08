@@ -392,7 +392,6 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 }
 
 func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest) error {
-
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
 	}
