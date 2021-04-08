@@ -35,8 +35,8 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: target/release/mything
-        asset_name: bin/beaujr/nmap_prometheus-client
+        file: bin/beaujr/nmap_prometheus-client
+        asset_name: Latest
         tag: amd64
         overwrite: true
         body: "AMD64 Client Release"
