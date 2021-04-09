@@ -16,6 +16,18 @@ jobs:
       id: buildx
       with:
         install: true
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.15.x
+    - name: Build Binaries
+      run: |
+        make build GOARCH=amd64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_amd64
+        make build GOARCH=arm64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm64
+        make build GOARCH=arm GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm
+        make build GOARCH=amd64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_amd64
+        make build GOARCH=arm64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm64
+        make build GOARCH=arm APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm
     - name: Available platforms
       run: echo ${{ steps.buildx.outputs.platforms }}
     - name: Docker Login
