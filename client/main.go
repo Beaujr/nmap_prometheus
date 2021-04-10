@@ -52,8 +52,31 @@ func main() {
 	}
 
 	c := reporter.NewReporter(*address, *home)
-	for !*ble {
+	if *ble {
+		processBLE(&c)
+	} else {
+		processNMAP(&c, localAddresses)
+	}
+
+}
+func processBLE(c *reporter.Reporter) {
+	err := bluetooth.Scan(c)
+	if err != nil {
+		grpcError := status.FromContextError(err)
+		grpcErrorCode := grpcError.Code()
+		if grpcErrorCode == codes.Unknown {
+			log.Println("unable to talk to grpc server")
+		}
+		log.Printf("unable to run ble scan: %v", err)
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
+	for {
 		addresses, err := network.Scan(*subnet, *home, localAddresses)
+		//addresses := make([]*pb.AddressRequest, 0)
+		//addresses = append(addresses, &pb.AddressRequest{Mac: "0000", Ip: "192.168.16.2"})
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
 		}
@@ -77,18 +100,4 @@ func main() {
 			time.Sleep(2 * time.Second)
 		}
 	}
-
-	if *ble {
-		err := bluetooth.Scan(&c)
-		if err != nil {
-			grpcError := status.FromContextError(err)
-			grpcErrorCode := grpcError.Code()
-			if grpcErrorCode == codes.Unknown {
-				log.Println("unable to talk to grpc server")
-			}
-			log.Printf("unable to run ble scan: %v", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-
 }
