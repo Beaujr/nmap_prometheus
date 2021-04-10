@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	pb "github.com/beaujr/nmap_prometheus/proto"
-	"github.com/denisbrodbeck/machineid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"log"
@@ -15,7 +14,7 @@ import (
 var (
 	timeout      = flag.Int("timeout", 10, "When to timeout connecting to server")
 	netInterface = flag.String("interface", "", "Interface to bind to")
-	agentId      = flag.String("agentId", "", "Identify Agent, if left blank will be the Machines ID")
+	agentId      = flag.String("agentId", "nmapAgent", "Identify Agent, if left blank will be the Machines ID")
 )
 
 // Reporter is the struct to handle GRP Comms
@@ -47,13 +46,6 @@ func NewReporter(address string, home string) Reporter {
 	conn, err := dial(address)
 	if err != nil {
 		log.Print(err)
-	}
-	if len(*agentId) == 0 {
-		machineId, err := machineid.ProtectedID("nmapprometheus")
-		if err != nil {
-			log.Fatal(err)
-		}
-		agentId = &machineId
 	}
 	return Reporter{Home: home, conn: conn, id: *agentId}
 }
