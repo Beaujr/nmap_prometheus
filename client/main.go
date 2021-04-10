@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"github.com/beaujr/nmap_prometheus/bluetooth"
-	pb "github.com/beaujr/nmap_prometheus/proto"
+	"github.com/beaujr/nmap_prometheus/network"
 	"github.com/beaujr/nmap_prometheus/reporter"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -53,9 +53,7 @@ func main() {
 
 	c := reporter.NewReporter(*address, *home)
 	for !*ble {
-		//addresses, err := network.Scan(*subnet, *home, localAddresses)
-		addresses := make([]*pb.AddressRequest, 0)
-		addresses = append(addresses, &pb.AddressRequest{Mac: "0000", Ip: "192.168.16.2"})
+		addresses, err := network.Scan(*subnet, *home, localAddresses)
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
 		}
