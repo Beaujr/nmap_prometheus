@@ -29,11 +29,11 @@ func main() {
 	if err != nil {
 		log.Println(err)
 	}
-	// handle err
 	for _, i := range ifaces {
 		addrs, _ := i.Addrs()
-		// handle err
-
+		if err != nil {
+			log.Println(err)
+		}
 		for _, addr := range addrs {
 			var ip net.IP
 			switch v := addr.(type) {
@@ -73,20 +73,25 @@ func processBLE(c *reporter.Reporter) {
 }
 
 func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
+	errors := 0
 	for {
 		addresses, err := network.Scan(*subnet, *home, localAddresses)
 		//addresses := make([]*pb.AddressRequest, 0)
 		//addresses = append(addresses, &pb.AddressRequest{Mac: "0000", Ip: "192.168.16.2"})
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
+			errors++
 		}
 		if len(addresses) > *bulk {
 			log.Printf("Bulk GRPC report: %d", len(addresses))
 			err = c.Addresses(addresses)
 			if err != nil {
 				log.Printf("unable to run GRPC report: %v", err)
+				time.Sleep(2 * time.Second)
+				errors++
+				continue
 			}
-			time.Sleep(2 * time.Second)
+			errors = 0
 			continue
 		}
 		err = c.Address(addresses)
@@ -98,6 +103,12 @@ func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
 			}
 			log.Printf("unable to run GRPC report: %v", err)
 			time.Sleep(2 * time.Second)
+			errors++
+		} else {
+			errors = 0
+		}
+		if errors >= 100 {
+			log.Fatalf("Failed for last %d seconds", errors/2)
 		}
 	}
 }
