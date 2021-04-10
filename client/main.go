@@ -80,6 +80,7 @@ func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
 		//addresses = append(addresses, &pb.AddressRequest{Mac: "0000", Ip: "192.168.16.2"})
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
+			errors++
 		}
 		if len(addresses) > *bulk {
 			log.Printf("Bulk GRPC report: %d", len(addresses))
