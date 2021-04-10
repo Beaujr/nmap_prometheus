@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
-	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/metadata"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -507,30 +507,20 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, erro
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
-	promMetric := "grpc_address"
-	if metrics[promMetric] == nil {
-		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_grpc_endpoint",
-			Help: "Number of calls to server endpoint",
-			ConstLabels: prometheus.Labels{
-				"name": "Address",
-			},
-		})
-		metrics[promMetric].Set(0)
-	}
-	metrics[promMetric].Add(1)
+	s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	return s.processIncomingAddress(ctx, in)
 }
 
 func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
-	clientIpFullIp, _ := peer.FromContext(ctx)
-	clientFullIpString := clientIpFullIp.Addr.String()
-	clientIpV4 := clientFullIpString[:strings.Index(clientFullIpString, ":")]
-	// assuming mac is empty as its the clients own ip
-	if clientIpV4 == incoming.Ip && incoming.Mac == "" {
-		return &pb.Reply{Acknowledged: true}, nil
-	}
+	//clientIpFullIp, _ := peer.FromContext(ctx)
+	//clientFullIpString := clientIpFullIp.Addr.String()
+	//clientIpV4 := clientFullIpString[:strings.Index(clientFullIpString, ":")]
+	//// assuming mac is empty as its the clients own ip
+	//if clientIpV4 == incoming.Ip && incoming.Mac == "" {
+	//	return &pb.Reply{Acknowledged: true}, nil
+	//}
 	if incoming.Mac == "" && incoming.Home != "" {
 		incoming.Mac = fmt.Sprintf("%s/%s", incoming.Home, strings.ReplaceAll(in.Ip, ".", "_"))
 	}
@@ -562,21 +552,58 @@ func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressReque
 
 	return &pb.Reply{Acknowledged: true}, nil
 }
+func (s *Server) grpcHitsMetrics(promMetric string, name string, itemCount int) {
+	if metrics[promMetric] == nil {
+		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint_items",
+			Help: "Number of calls to server endpoint",
+			ConstLabels: prometheus.Labels{
+				"name": name,
+			},
+		})
+		metrics[promMetric].Set(0)
+	}
+	metrics[promMetric].Add(float64(itemCount))
+}
 
-// Addresses Handler for receiving array of IP/MAC requests
-func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
-	promMetric := "grpc_addresses"
+func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
 	if metrics[promMetric] == nil {
 		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "home_detector_grpc_endpoint",
 			Help: "Number of calls to server endpoint",
 			ConstLabels: prometheus.Labels{
-				"name": "Addresses",
+				"name": name,
 			},
 		})
 		metrics[promMetric].Set(0)
 	}
 	metrics[promMetric].Add(1)
+	headers, _ := metadata.FromIncomingContext(ctx)
+	home := "unknown"
+	val := headers.Get("home")
+	if len(val) > 0 {
+		home = val[0]
+	}
+	if val := headers.Get("client"); len(val) > 0 {
+		promClientMetric := fmt.Sprintf("%s_client", val[0])
+		if metrics[promClientMetric] == nil {
+			metrics[promClientMetric] = promauto.NewGauge(prometheus.GaugeOpts{
+				Name: "home_detector_grpc_clients",
+				Help: "Number of calls to server endpoint",
+				ConstLabels: prometheus.Labels{
+					"name": val[0],
+					"home": home,
+				},
+			})
+		}
+		metrics[promClientMetric].Set(float64(time.Now().Unix()))
+	}
+}
+
+// Addresses Handler for receiving array of IP/MAC requests
+func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
+	s.grpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
+	s.grpcHitsMetrics("grpc_address_count", "Address", len(in.Addresses))
 	for _, addr := range in.Addresses {
 		_, err := s.processIncomingAddress(ctx, addr)
 		if err != nil {
@@ -660,18 +687,9 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
-	promMetric := "grpc_ble"
-	if metrics[promMetric] == nil {
-		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_grpc_endpoint",
-			Help: "Number of calls to server endpoint",
-			ConstLabels: prometheus.Labels{
-				"name": "Ack",
-			},
-		})
-		metrics[promMetric].Set(0)
-	}
-	metrics[promMetric].Add(1)
+	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
+	s.grpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
+
 	ack, err := s.processIncomingBleAddress(ctx, in)
 	if err != nil {
 		log.Println(err)

@@ -5,9 +5,12 @@ import (
 	"github.com/beaujr/nmap_prometheus/bluetooth"
 	"github.com/beaujr/nmap_prometheus/network"
 	"github.com/beaujr/nmap_prometheus/reporter"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 var (
@@ -21,7 +24,6 @@ var (
 func main() {
 	log.Println("Application Starting")
 	flag.Parse()
-	c := reporter.NewReporter(*address, *home)
 	localAddresses := make(map[string]string)
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -40,11 +42,41 @@ func main() {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			localAddresses[ip.String()] = strings.ToUpper(i.HardwareAddr.String())
+			if ip = addr.(*net.IPNet).IP.To4(); ip != nil {
+				hwAddress := strings.ToUpper(i.HardwareAddr.String())
+				if len(hwAddress) > 0 {
+					localAddresses[ip.String()] = hwAddress
+				}
+			}
 		}
 	}
-	for !*ble {
+
+	c := reporter.NewReporter(*address, *home)
+	if *ble {
+		processBLE(&c)
+	} else {
+		processNMAP(&c, localAddresses)
+	}
+
+}
+func processBLE(c *reporter.Reporter) {
+	err := bluetooth.Scan(c)
+	if err != nil {
+		grpcError := status.FromContextError(err)
+		grpcErrorCode := grpcError.Code()
+		if grpcErrorCode == codes.Unknown {
+			log.Println("unable to talk to grpc server")
+		}
+		log.Printf("unable to run ble scan: %v", err)
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
+	for {
 		addresses, err := network.Scan(*subnet, *home, localAddresses)
+		//addresses := make([]*pb.AddressRequest, 0)
+		//addresses = append(addresses, &pb.AddressRequest{Mac: "0000", Ip: "192.168.16.2"})
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
 		}
@@ -54,19 +86,18 @@ func main() {
 			if err != nil {
 				log.Printf("unable to run GRPC report: %v", err)
 			}
+			time.Sleep(2 * time.Second)
 			continue
 		}
 		err = c.Address(addresses)
 		if err != nil {
+			grpcError := status.FromContextError(err)
+			grpcErrorCode := grpcError.Code()
+			if grpcErrorCode == codes.Unknown {
+				log.Println("unable to talk to grpc server")
+			}
 			log.Printf("unable to run GRPC report: %v", err)
+			time.Sleep(2 * time.Second)
 		}
 	}
-
-	if *ble {
-		err := bluetooth.Scan(&c)
-		if err != nil {
-			log.Printf("unable to run ble scan: %v", err)
-		}
-	}
-
 }
