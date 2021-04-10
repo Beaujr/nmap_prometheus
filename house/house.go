@@ -507,7 +507,7 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, erro
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics("grpc_address", "Address", ctx)
+	s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	return s.processIncomingAddress(ctx, in)
 }
@@ -602,7 +602,7 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 
 // Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics("grpc_addresses", "Addresses", ctx)
+	s.grpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
 	s.grpcHitsMetrics("grpc_address_count", "Address", len(in.Addresses))
 	for _, addr := range in.Addresses {
 		_, err := s.processIncomingAddress(ctx, addr)
@@ -687,7 +687,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics("grpc_ble", "Ack", ctx)
+	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
 	s.grpcHitsMetrics("grpc_address_count", "Ack", 1)
 
 	ack, err := s.processIncomingBleAddress(ctx, in)
