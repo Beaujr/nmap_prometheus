@@ -566,7 +566,7 @@ func (s *Server) grpcHitsMetrics(promMetric string, name string, itemCount int) 
 	metrics[promMetric].Add(float64(itemCount))
 }
 
-func (s *Server) grpcPrometheusMetrics(promMetric string, name string, ctx context.Context) {
+func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
 	if metrics[promMetric] == nil {
 		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "home_detector_grpc_endpoint",
