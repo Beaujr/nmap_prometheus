@@ -104,6 +104,8 @@ func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
 			log.Printf("unable to run GRPC report: %v", err)
 			time.Sleep(2 * time.Second)
 			errors++
+		} else {
+			errors = 0
 		}
 		if errors >= 100 {
 			log.Fatalf("Failed for last %d seconds", errors/2)
