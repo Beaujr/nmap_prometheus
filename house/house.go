@@ -124,43 +124,49 @@ func NewServer() HomeManager {
 			server.registerMetric(*val)
 		}
 	})
-	if *cqEnabled {
-		c.AddFunc("*/10 * * * * *", func() {
-			tcs, err := server.getTc()
-			if err != nil {
-				log.Println(err)
-			}
+	c.AddFunc("*/10 * * * * *", func() {
+		tcs, err := server.getTc()
+		if err != nil {
+			log.Println(err)
+		}
 
-			for _, tc := range tcs {
-				if metrics[tc.Id] != nil {
-					if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
-						metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
-					} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
-						metrics[tc.Id].Set(float64(0))
-					}
-				}
-				if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed {
-					tc.Executed = true
-					if !*debug {
-						_, err := server.callAssistant(tc.Command)
-						if err != nil {
-							log.Println(err)
-						}
-						err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
-						if err != nil {
-							log.Println(err)
-						}
-					} else {
-						log.Printf("Scheduled Task: %s", tc.Command)
-					}
-					err := server.deleteTc(tc)
+		for _, tc := range tcs {
+			if metrics[tc.Id] == nil {
+				metrics[tc.Id] = promauto.NewGauge(prometheus.GaugeOpts{
+					Name: "home_detector_ble_device",
+					Help: "BleDevice in home",
+					ConstLabels: prometheus.Labels{
+						"name":    strings.ReplaceAll(tc.Id, " ", "_"),
+						"command": tc.Command,
+					},
+				})
+			}
+			if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
+				metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
+			} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
+				metrics[tc.Id].Set(float64(0))
+			}
+			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
+				tc.Executed = true
+				if !*debug {
+					_, err := server.callAssistant(tc.Command)
 					if err != nil {
 						log.Println(err)
 					}
+					err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
+					if err != nil {
+						log.Println(err)
+					}
+				} else {
+					log.Printf("Scheduled Task: %s", tc.Command)
+				}
+				err := server.deleteTc(tc)
+				if err != nil {
+					log.Println(err)
 				}
 			}
-		})
-	}
+		}
+	})
 
 	knowDevices, err := server.readNetworkConfig()
 	if err != nil {
