@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/Ullaakut/nmap v2.0.0+incompatible
-	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/go-ble/ble v0.0.0-20200407180624-067514cd6e24
 	github.com/golang/protobuf v1.4.3
 	github.com/ozonru/etcd/v3 v3.3.0-rc.0-grpc1.30.0
