@@ -87,14 +87,19 @@ func writeConfig(data []byte, filename string) error {
 	return nil
 }
 
-// ByWeight implements sort.Interface by providing Less and using the Len and
-// Swap methods of the embedded Organs value.
+// TimeCommands implements sort.Interface by providing Less and using the Len and
 type TimeCommands []*TimedCommand
+
+// ByExecutedAt implements TimeCommands
 type ByExecutedAt struct{ TimeCommands }
 
-func (s TimeCommands) Len() int      { return len(s) }
+// Len returns length of TimeCommands Array
+func (s TimeCommands) Len() int { return len(s) }
+
+// Swap sorts the array using equivalent comparison
 func (s TimeCommands) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
+// Less sorts the array using less than comparison
 func (s ByExecutedAt) Less(i, j int) bool {
 	return s.TimeCommands[i].ExecuteAt < s.TimeCommands[j].ExecuteAt
 }
