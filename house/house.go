@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -86,6 +87,23 @@ func writeConfig(data []byte, filename string) error {
 	return nil
 }
 
+// TimeCommands implements sort.Interface by providing Less and using the Len and
+type TimeCommands []*TimedCommand
+
+// ByExecutedAt implements TimeCommands
+type ByExecutedAt struct{ TimeCommands }
+
+// Len returns length of TimeCommands Array
+func (s TimeCommands) Len() int { return len(s) }
+
+// Swap sorts the array using equivalent comparison
+func (s TimeCommands) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// Less sorts the array using less than comparison
+func (s ByExecutedAt) Less(i, j int) bool {
+	return s.TimeCommands[i].ExecuteAt < s.TimeCommands[j].ExecuteAt
+}
+
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
@@ -129,41 +147,19 @@ func NewServer() HomeManager {
 		if err != nil {
 			log.Println(err)
 		}
-
+		sortedTcs := make([]*TimedCommand, 0)
 		for _, tc := range tcs {
-			if metrics[tc.Id] == nil {
-				metrics[tc.Id] = promauto.NewGauge(prometheus.GaugeOpts{
-					Name: "home_detector_ble_device",
-					Help: "BleDevice in home",
-					ConstLabels: prometheus.Labels{
-						"name":    strings.ReplaceAll(tc.Id, " ", "_"),
-						"command": tc.Command,
-					},
-				})
-			}
-			if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
-				metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
-			} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
-				metrics[tc.Id].Set(float64(0))
-			}
-			if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
-				tc.Executed = true
-				if !*debug {
-					_, err := server.callAssistant(tc.Command)
-					if err != nil {
-						log.Println(err)
-					}
-					err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
-					if err != nil {
-						log.Println(err)
-					}
-				} else {
-					log.Printf("Scheduled Task: %s", tc.Command)
-				}
-				err := server.deleteTc(tc)
-				if err != nil {
-					log.Println(err)
-				}
+			sortedTcs = append(sortedTcs, tc)
+		}
+		sort.Sort(ByExecutedAt{sortedTcs})
+		for _, tc := range tcs {
+			log.Println(tc.ExecuteAt)
+			err = server.processTimedCommand(tc)
+			if err != nil {
+				log.Println(err)
+				tc.Executed = false
+				err = server.writeTc(tc)
+				log.Println(err)
 			}
 		}
 	})
@@ -190,6 +186,49 @@ func NewServer() HomeManager {
 	c.Start()
 	server.recordMetrics()
 	return server
+}
+
+func (s *Server) processTimedCommand(tc *TimedCommand) error {
+	if metrics[tc.Id] == nil {
+		metrics[tc.Id] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "home_detector_ble_device",
+			Help: "BleDevice in home",
+			ConstLabels: prometheus.Labels{
+				"name":    strings.ReplaceAll(tc.Id, " ", "_"),
+				"command": tc.Command,
+			},
+		})
+	}
+	if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
+		metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
+	} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
+		metrics[tc.Id].Set(float64(0))
+	}
+	if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
+		tc.Executed = true
+		err := s.writeTc(tc)
+		if err != nil {
+			log.Println(err)
+		}
+		if !*debug {
+			_, err := s.callAssistant(tc.Command)
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+			err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
+			if err != nil {
+				log.Println(err)
+			}
+		} else {
+			log.Printf("Scheduled Task: %s", tc.Command)
+		}
+		err = s.deleteTc(tc)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+	return nil
 }
 
 // Devices API endpoint to determine devices status
@@ -520,20 +559,13 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
-	//clientIpFullIp, _ := peer.FromContext(ctx)
-	//clientFullIpString := clientIpFullIp.Addr.String()
-	//clientIpV4 := clientFullIpString[:strings.Index(clientFullIpString, ":")]
-	//// assuming mac is empty as its the clients own ip
-	//if clientIpV4 == incoming.Ip && incoming.Mac == "" {
-	//	return &pb.Reply{Acknowledged: true}, nil
-	//}
 	if incoming.Mac == "" && incoming.Home != "" {
 		incoming.Mac = fmt.Sprintf("%s/%s", incoming.Home, strings.ReplaceAll(in.Ip, ".", "_"))
 	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
+	item, err := s.etcdClient.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
 		return nil, err
 	}

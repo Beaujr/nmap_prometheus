@@ -19,6 +19,7 @@ var (
 	ble     = flag.Bool("ble", false, "Boolean for BLE scanning")
 	home    = flag.String("home", "default", "Agent Location eg: Home, Dads house")
 	bulk    = flag.Int("bulk", 10, "When to upload in bulk vs singular")
+	script  = flag.Bool("script", false, "Set to true to run once off scan and report")
 )
 
 func main() {
@@ -76,12 +77,11 @@ func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
 	errors := 0
 	for {
 		addresses, err := network.Scan(*subnet, *home, localAddresses)
-		//addresses := make([]*pb.AddressRequest, 0)
-		//addresses = append(addresses, &pb.AddressRequest{Mac: "0000", Ip: "192.168.16.2"})
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
 			errors++
 		}
+
 		if len(addresses) > *bulk {
 			log.Printf("Bulk GRPC report: %d", len(addresses))
 			err = c.Addresses(addresses)
@@ -89,23 +89,27 @@ func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
 				log.Printf("unable to run GRPC report: %v", err)
 				time.Sleep(2 * time.Second)
 				errors++
-				continue
+			} else {
+				errors = 0
 			}
-			errors = 0
-			continue
-		}
-		err = c.Address(addresses)
-		if err != nil {
-			grpcError := status.FromContextError(err)
-			grpcErrorCode := grpcError.Code()
-			if grpcErrorCode == codes.Unknown {
-				log.Println("unable to talk to grpc server")
-			}
-			log.Printf("unable to run GRPC report: %v", err)
-			time.Sleep(2 * time.Second)
-			errors++
 		} else {
-			errors = 0
+			err = c.Address(addresses)
+			if err != nil {
+				grpcError := status.FromContextError(err)
+				grpcErrorCode := grpcError.Code()
+				if grpcErrorCode == codes.Unknown {
+					log.Println("unable to talk to grpc server")
+				}
+				log.Printf("unable to run GRPC report: %v", err)
+				time.Sleep(2 * time.Second)
+				errors++
+			} else {
+				errors = 0
+			}
+		}
+
+		if *script {
+			return
 		}
 		if errors >= 100 {
 			log.Fatalf("Failed for last %d seconds", errors/2)
