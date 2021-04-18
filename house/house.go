@@ -19,7 +19,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -143,24 +142,9 @@ func NewServer() HomeManager {
 		}
 	})
 	c.AddFunc("*/10 * * * * *", func() {
-		tcs, err := server.getTc()
+		err := server.processTimedCommandQueue()
 		if err != nil {
 			log.Println(err)
-		}
-		sortedTcs := make([]*TimedCommand, 0)
-		for _, tc := range tcs {
-			sortedTcs = append(sortedTcs, tc)
-		}
-		sort.Sort(ByExecutedAt{sortedTcs})
-		for _, tc := range tcs {
-			log.Println(tc.ExecuteAt)
-			err = server.processTimedCommand(tc)
-			if err != nil {
-				log.Println(err)
-				tc.Executed = false
-				err = server.writeTc(tc)
-				log.Println(err)
-			}
 		}
 	})
 
@@ -186,49 +170,6 @@ func NewServer() HomeManager {
 	c.Start()
 	server.recordMetrics()
 	return server
-}
-
-func (s *Server) processTimedCommand(tc *TimedCommand) error {
-	if metrics[tc.Id] == nil {
-		metrics[tc.Id] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_ble_device",
-			Help: "BleDevice in home",
-			ConstLabels: prometheus.Labels{
-				"name":    strings.ReplaceAll(tc.Id, " ", "_"),
-				"command": tc.Command,
-			},
-		})
-	}
-	if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
-		metrics[tc.Id].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
-	} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
-		metrics[tc.Id].Set(float64(0))
-	}
-	if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
-		tc.Executed = true
-		err := s.writeTc(tc)
-		if err != nil {
-			log.Println(err)
-		}
-		if !*debug {
-			_, err := s.callAssistant(tc.Command)
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-			err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
-			if err != nil {
-				log.Println(err)
-			}
-		} else {
-			log.Printf("Scheduled Task: %s", tc.Command)
-		}
-		err = s.deleteTc(tc)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-	return nil
 }
 
 // Devices API endpoint to determine devices status
@@ -677,45 +618,9 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 		if lastSeen > *bleTimeAwaySeconds {
 			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
 			for _, command := range device.Commands {
-				if command.Timeout > 0 {
-					// Create a queue
-					tc := &TimedCommand{
-						Owner:     device.Id,
-						Command:   command.Command,
-						ExecuteAt: int64(time.Now().Unix()) + command.Timeout,
-						Executed:  false,
-						Id:        fmt.Sprintf("%s%v", device.Id, command.Id),
-					}
-					if metrics[tc.Id] == nil {
-						metrics[tc.Id] = promauto.NewGauge(prometheus.GaugeOpts{
-							Name: "home_detector_ble_device",
-							Help: "BleDevice in home",
-							ConstLabels: prometheus.Labels{
-								"name":    strings.ReplaceAll(tc.Id, " ", "_"),
-								"command": tc.Command,
-							},
-						})
-					}
-					metrics[tc.Id].Set(float64(command.Timeout))
-					err := s.writeTc(tc)
-					if err != nil {
-						log.Println(err)
-					}
-				}
-				if command.Timeout == 0 {
-					if !*debug {
-						_, err := s.callAssistant(command.Command)
-						if err != nil {
-							return nil, err
-						}
-						err = notifications.SendNotification(device.Name, command.Command, "devices")
-						if err != nil {
-							return nil, err
-						}
-					}
-					if *debug {
-						log.Println(command.Command)
-					}
+				err = s.createTimedCommand(command.Timeout, device.Id, fmt.Sprintf("%s%v", device.Id, command.Id), command.Command, device.Name)
+				if err != nil {
+					return nil, err
 				}
 			}
 		}
@@ -795,9 +700,15 @@ func (s *Server) iotStatusManager() error {
 					log.Println(err)
 					return err
 				}
-				if strings.Contains(home, "wst") {
-					_, err = assistant.Call("Everyone's away")
-					if err != nil {
+				devices, err := s.readNetworkConfig()
+				if err != nil {
+					log.Println(err)
+					return err
+				}
+				for _, device := range devices {
+					if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
+
+						_, err = s.callAssistant(fmt.Sprintf("Turn %s off", device.Name))
 						log.Println(err)
 						return err
 					}
