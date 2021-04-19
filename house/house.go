@@ -444,6 +444,18 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 				if err != nil {
 					return err
 				}
+				tcs, err := s.getTc()
+				if err != nil {
+					return err
+				}
+				for key, val := range tcs {
+					if strings.Contains(key, houseDevice.Home) {
+						err = s.deleteTc(val)
+						if err != nil {
+							return err
+						}
+					}
+				}
 			}
 		}
 	}
@@ -707,10 +719,10 @@ func (s *Server) iotStatusManager() error {
 				}
 				for _, device := range devices {
 					if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
-
-						_, err = s.callAssistant(fmt.Sprintf("Turn %s off", device.Name))
-						log.Println(err)
-						return err
+						err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Name)
+						if err != nil {
+							return err
+						}
 					}
 				}
 			}
