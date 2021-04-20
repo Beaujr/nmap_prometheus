@@ -423,47 +423,11 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	}
 
 	if houseDevice.Person {
-		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		houseStatus, err := s.etcdClient.Get(context.Background(), homeKey)
+		err := s.processPerson(houseDevice)
 		if err != nil {
-			log.Panic(err.Error())
-		}
-
-		if houseStatus.Count == 0 {
-			homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-			_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
-			if err != nil {
-				log.Panic(err.Error())
-			}
-		} else if val, err := strconv.ParseBool(string(houseStatus.Kvs[0].Value)); val && err == nil {
-			homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-			_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
-			if err != nil {
-				log.Panic(err.Error())
-			}
-			if *debug {
-				log.Println("House no longer empty")
-			} else {
-				err := notifications.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
-				if err != nil {
-					return err
-				}
-				tcs, err := s.getTc()
-				if err != nil {
-					return err
-				}
-				for key, val := range tcs {
-					if strings.Contains(key, houseDevice.Home) {
-						err = s.deleteTc(val)
-						if err != nil {
-							return err
-						}
-					}
-				}
-			}
+			return nil
 		}
 	}
-
 	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
@@ -694,60 +658,6 @@ func (s *Server) isHouseEmpty(home string) bool {
 		}
 	}
 	return houseEmpty
-}
-
-func (s *Server) iotStatusManager() error {
-	gHouseEmpty, err := s.readHomesConfig()
-	if err != nil {
-		return err
-	}
-	for home, empty := range gHouseEmpty {
-		if houseEmpty := s.isHouseEmpty(home); houseEmpty != *empty {
-			_, err := s.etcdClient.Put(context.Background(), fmt.Sprintf("%s%s", homePrefix, home), strconv.FormatBool(houseEmpty))
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-			if *debug {
-				log.Printf("House (%s) is Empty(%v)", home, houseEmpty)
-			} else {
-				err := notifications.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
-				if err != nil {
-					log.Println(err)
-					return err
-				}
-			}
-			devices, err := s.readNetworkConfig()
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-			for _, device := range devices {
-				if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
-					err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Name)
-					if err != nil {
-						return err
-					}
-				}
-			}
-		}
-		if !s.isHouseEmpty(home) {
-			keys, err := s.getTcKeys()
-			if err != nil {
-				return err
-			}
-			for _, key := range keys {
-				if strings.Contains(*key, home) {
-					err = s.deleteTcByKey(*key)
-					if err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 func (s *Server) deviceManager() error {
