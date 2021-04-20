@@ -9,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type device struct {
@@ -110,6 +111,8 @@ func (s *Server) processPerson(houseDevice *device) error {
 			}
 		}
 	}
+	houseDevice.Away = false
+	houseDevice.LastSeen = int64(time.Now().Unix())
 	return nil
 }
 

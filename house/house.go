@@ -396,7 +396,6 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	if incoming.Home != houseDevice.Home {
 		houseDevice.Home = incoming.Home
 		message := fmt.Sprintf("%s has moved to %s", houseDevice.Name, houseDevice.Home)
-		//delete(metrics, houseDevice.Name)
 		if *debug {
 			log.Println(message)
 		} else {
@@ -428,8 +427,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 			return nil
 		}
 	}
-	houseDevice.Away = false
-	houseDevice.LastSeen = int64(time.Now().Unix())
+
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
 		err := s.writeNetworkDevice(houseDevice)
 		if err != nil {
