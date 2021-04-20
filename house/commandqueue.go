@@ -37,7 +37,7 @@ func (s *Server) processTimedCommandQueue() error {
 	if len(tcs) == 0 {
 		for key, val := range metrics {
 			if strings.Contains(key, metricsKey) && val != nil {
-				metrics[key] = nil
+				metrics[key].Set(0)
 			}
 		}
 	}

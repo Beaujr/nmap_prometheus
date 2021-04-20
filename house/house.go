@@ -131,6 +131,10 @@ func NewServer() HomeManager {
 		if err != nil {
 			log.Println(err)
 		}
+		err = server.iotStatusManager()
+		if err != nil {
+			log.Println(err)
+		}
 	})
 	c.AddFunc("* */1 * * * *", func() {
 		knowDevices, err := server.readNetworkConfig()
@@ -712,17 +716,31 @@ func (s *Server) iotStatusManager() error {
 					log.Println(err)
 					return err
 				}
-				devices, err := s.readNetworkConfig()
-				if err != nil {
-					log.Println(err)
-					return err
+			}
+			devices, err := s.readNetworkConfig()
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+			for _, device := range devices {
+				if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
+					err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Name)
+					if err != nil {
+						return err
+					}
 				}
-				for _, device := range devices {
-					if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
-						err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Name)
-						if err != nil {
-							return err
-						}
+			}
+		}
+		if !s.isHouseEmpty(home) {
+			keys, err := s.getTcKeys()
+			if err != nil {
+				return err
+			}
+			for _, key := range keys {
+				if strings.Contains(*key, home) {
+					err = s.deleteTcByKey(*key)
+					if err != nil {
+						return err
 					}
 				}
 			}
@@ -753,10 +771,6 @@ func (s *Server) deviceManager() error {
 				}
 			}
 			err = s.writeNetworkDevice(device)
-			if err != nil {
-				return nil
-			}
-			err := s.iotStatusManager()
 			if err != nil {
 				return nil
 			}
