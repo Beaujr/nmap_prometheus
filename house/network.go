@@ -3,11 +3,13 @@ package house
 import (
 	"context"
 	"fmt"
+	"github.com/beaujr/nmap_prometheus/notifications"
 	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type device struct {
@@ -68,6 +70,52 @@ func (s *Server) readNetworkConfig() (map[string]*device, error) {
 	}
 	return result, nil
 }
+
+func (s *Server) processPerson(houseDevice *device) error {
+	homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
+	houseStatus, err := s.etcdClient.Get(context.Background(), homeKey)
+	if err != nil {
+		log.Panic(err.Error())
+	}
+
+	if houseStatus.Count == 0 {
+		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
+		_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
+		if err != nil {
+			log.Panic(err.Error())
+		}
+	} else if val, err := strconv.ParseBool(string(houseStatus.Kvs[0].Value)); val && err == nil {
+		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
+		_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
+		if err != nil {
+			log.Panic(err.Error())
+		}
+		if *debug {
+			log.Println("House no longer empty")
+		} else {
+			err := notifications.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
+			if err != nil {
+				return err
+			}
+			tcs, err := s.getTc()
+			if err != nil {
+				return err
+			}
+			for key, val := range tcs {
+				if strings.Contains(key, houseDevice.Home) {
+					err = s.deleteTc(val)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	houseDevice.Away = false
+	houseDevice.LastSeen = int64(time.Now().Unix())
+	return nil
+}
+
 func (s *Server) readHomesConfig() (map[string]*bool, error) {
 	var result map[string]*bool
 	result = make(map[string]*bool)

@@ -131,6 +131,10 @@ func (s *Server) writeTc(item *TimedCommand) error {
 
 func (s *Server) deleteTc(item *TimedCommand) error {
 	key := fmt.Sprintf("%s%s", tcPrefix, item.Id)
+	return s.deleteTcByKey(key)
+}
+
+func (s *Server) deleteTcByKey(key string) error {
 	_, err := s.etcdClient.Delete(context.Background(), key)
 	return err
 }
@@ -157,6 +161,24 @@ func (s *Server) getTc() (map[string]*TimedCommand, error) {
 		strKey := string(key)
 		newKey := strings.ReplaceAll(strKey, tcPrefix, "")
 		result[string(newKey)] = dev
+		i++
+	}
+	return result, nil
+}
+func (s *Server) getTcKeys() ([]*string, error) {
+	var result []*string
+	result = make([]*string, 0)
+	items, err := s.etcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix(), clientv3.WithKeysOnly())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return result, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		strKey := string(items.Kvs[i].Key)
+		result = append(result, &strKey)
 		i++
 	}
 	return result, nil
