@@ -3,6 +3,7 @@ package reporter
 import (
 	"context"
 	"flag"
+	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -19,9 +20,10 @@ var (
 
 // Reporter is the struct to handle GRP Comms
 type Reporter struct {
-	Home string
-	id   string
-	conn *grpc.ClientConn
+	Home       string
+	id         string
+	conn       *grpc.ClientConn
+	ignoreList map[string]bool
 }
 
 func dial(address string) (*grpc.ClientConn, error) {
@@ -47,7 +49,8 @@ func NewReporter(address string, home string) Reporter {
 	if err != nil {
 		log.Print(err)
 	}
-	return Reporter{Home: home, conn: conn, id: *agentId}
+	ignoreList := make(map[string]bool)
+	return Reporter{Home: home, conn: conn, id: *agentId, ignoreList: ignoreList}
 }
 func (r *Reporter) buildClient() (pb.HomeDetectorClient, context.Context, context.CancelFunc) {
 	client := pb.NewHomeDetectorClient(r.conn)
@@ -88,6 +91,10 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 // Bles is for handling Bluetooth Mac addresses
 func (r *Reporter) Bles(macs []*string) error {
 	for _, mac := range macs {
+		if val, ok := r.ignoreList[*mac]; ok && !val {
+			log.Println(fmt.Sprintf("ignoring ble: %s", *mac))
+			return nil
+		}
 		c, ctx, cancel := r.buildClient()
 		defer cancel()
 		response, err := c.Ack(ctx, &pb.BleRequest{Mac: *mac, Home: r.Home})
@@ -97,6 +104,7 @@ func (r *Reporter) Bles(macs []*string) error {
 		if response.Acknowledged {
 			log.Printf("%s, %v", *mac, response.Acknowledged)
 		}
+		r.ignoreList[*mac] = response.Acknowledged
 	}
 	return nil
 }
