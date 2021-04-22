@@ -30,7 +30,7 @@ type FCMNotifier struct {
 	url *string
 }
 
-// FCMNotifier is a log implementation of the Notifier
+// DebugNotifier is a log implementation of the Notifier
 type DebugNotifier struct {
 	Notifier
 }
