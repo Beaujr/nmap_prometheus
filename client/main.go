@@ -2,9 +2,7 @@ package main
 
 import (
 	"flag"
-	"github.com/beaujr/nmap_prometheus/bluetooth"
-	"github.com/beaujr/nmap_prometheus/network"
-	"github.com/beaujr/nmap_prometheus/reporter"
+	"github.com/beaujr/nmap_prometheus/agent"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
@@ -52,7 +50,7 @@ func main() {
 		}
 	}
 
-	c := reporter.NewReporter(*address, *home)
+	c := agent.NewReporter(*address, *home)
 	if *ble {
 		processBLE(&c)
 	} else {
@@ -60,8 +58,8 @@ func main() {
 	}
 
 }
-func processBLE(c *reporter.Reporter) {
-	err := bluetooth.Scan(c)
+func processBLE(c *agent.Reporter) {
+	err := c.Scan()
 	if err != nil {
 		grpcError := status.FromContextError(err)
 		grpcErrorCode := grpcError.Code()
@@ -73,10 +71,10 @@ func processBLE(c *reporter.Reporter) {
 	}
 }
 
-func processNMAP(c *reporter.Reporter, localAddresses map[string]string) {
+func processNMAP(c *agent.Reporter, localAddresses map[string]string) {
 	errors := 0
 	for {
-		addresses, err := network.Scan(*subnet, *home, localAddresses)
+		addresses, err := c.ScanNmap(*subnet, *home, localAddresses)
 		if err != nil {
 			log.Printf("unable to run nmap scan: %v", err)
 			errors++

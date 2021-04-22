@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/etcd"
-	"github.com/beaujr/nmap_prometheus/macvendor"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
 	"github.com/prometheus/client_golang/prometheus"
@@ -342,7 +341,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	}
 	vendor := "unknown"
 	if in.Mac != in.Ip && strings.Contains(in.Mac, ":") {
-		macVendor, err := macvendor.GetManufacturer(in.Mac)
+		macVendor, err := GetManufacturer(in.Mac)
 		if macVendor != nil {
 			vendor = *macVendor
 		}
