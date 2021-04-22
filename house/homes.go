@@ -3,7 +3,6 @@ package house
 import (
 	"context"
 	"fmt"
-	"github.com/beaujr/nmap_prometheus/notifications"
 	"gopkg.in/yaml.v2"
 	"log"
 	"strconv"
@@ -66,7 +65,7 @@ func (s *Server) toggleHouseStatus(home string, houseEmpty bool) error {
 	if *debug {
 		log.Printf("House (%s) is Empty(%v)", home, houseEmpty)
 	} else {
-		err := notifications.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
+		err := SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
 		if err != nil {
 			log.Println(err)
 			return err

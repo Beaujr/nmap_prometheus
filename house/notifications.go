@@ -1,4 +1,4 @@
-package notifications
+package house
 
 import (
 	"flag"
@@ -14,6 +14,9 @@ var fcmUrl = flag.String("fcm", "http://fcmUrl", "Google Firbase Cloud Messaging
 // SendNotification to GCM topic defined in fcmUrl
 func SendNotification(title string, message string, topic string) error {
 	log.Printf("Notification: %s , %s", title, message)
+	if *debug {
+		return nil
+	}
 	payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")
 
 	req, _ := http.NewRequest("POST", fmt.Sprintf("%s%s", *fcmUrl, topic), payload)

@@ -2,7 +2,6 @@ package house
 
 import (
 	"fmt"
-	"github.com/beaujr/nmap_prometheus/notifications"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"log"
@@ -96,18 +95,14 @@ func (s *Server) processTimedCommand(tc *TimedCommand) error {
 		if err != nil {
 			log.Println(err)
 		}
-		if !*debug {
-			_, err := s.callAssistant(tc.Command)
-			if err != nil {
-				log.Println(err)
-				return err
-			}
-			err = notifications.SendNotification("Scheduled Task", tc.Command, "devices")
-			if err != nil {
-				log.Println(err)
-			}
-		} else {
-			log.Printf("Scheduled Task: %s", tc.Command)
+		_, err = s.callAssistant(tc.Command)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		err = SendNotification("Scheduled Task", tc.Command, "devices")
+		if err != nil {
+			log.Println(err)
 		}
 		err = s.deleteTc(tc)
 		if err != nil {

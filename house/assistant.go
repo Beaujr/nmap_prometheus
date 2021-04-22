@@ -1,4 +1,4 @@
-package assistant
+package house
 
 import (
 	"encoding/json"
@@ -42,6 +42,10 @@ type psResponse struct {
 
 // Call assistant relay with command
 func Call(command string) (*string, error) {
+	if *debug {
+		log.Println(command)
+		return &command, nil
+	}
 	payload := strings.NewReader("{\"user\":\"" + *assistantUser + "\",\"command\":\"" + command + "\", \"converse\": false}")
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
 	if err != nil {
@@ -60,8 +64,6 @@ func Call(command string) (*string, error) {
 	defer res.Body.Close()
 
 	body, _ := ioutil.ReadAll(res.Body)
-	fmt.Println(res)
-	fmt.Println(string(body))
 	assistantResponse := gaResponse{}
 	if err := json.Unmarshal(body, &assistantResponse); err != nil {
 		panic(err)

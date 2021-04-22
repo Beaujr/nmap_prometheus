@@ -3,13 +3,11 @@ package house
 import (
 	"context"
 	"fmt"
-	"github.com/beaujr/nmap_prometheus/notifications"
 	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
 	"log"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type device struct {
@@ -93,7 +91,7 @@ func (s *Server) processPerson(houseDevice *device) error {
 		if *debug {
 			log.Println("House no longer empty")
 		} else {
-			err := notifications.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
+			err := SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
 			if err != nil {
 				return err
 			}
@@ -111,8 +109,6 @@ func (s *Server) processPerson(houseDevice *device) error {
 			}
 		}
 	}
-	houseDevice.Away = false
-	houseDevice.LastSeen = int64(time.Now().Unix())
 	return nil
 }
 
