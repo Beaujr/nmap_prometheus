@@ -9,17 +9,36 @@ import (
 	"strings"
 )
 
-var fcmUrl = flag.String("fcm", "http://fcmUrl", "Google Firbase Cloud Messaging URL")
+var fcmUrl = flag.String("fcm", "", "Google Firbase Cloud Messaging URL eg http://fcmUrl")
+
+type Notifier interface {
+	SendNotification(title string, message string, topic string) error
+}
+
+func NewNotifier() Notifier {
+	if *debug || len(*fcmUrl) == 0 {
+		return &DebugNotifier{}
+	}
+	return &FCMNotifier{url: fcmUrl}
+}
+
+// Server is an implementation of the proto HomeDetectorServer
+type FCMNotifier struct {
+	Notifier
+	url *string
+}
+
+// Server is an implementation of the proto HomeDetectorServer
+type DebugNotifier struct {
+	Notifier
+}
 
 // SendNotification to GCM topic defined in fcmUrl
-func SendNotification(title string, message string, topic string) error {
+func (fcm *FCMNotifier) SendNotification(title string, message string, topic string) error {
 	log.Printf("Notification: %s , %s", title, message)
-	if *debug {
-		return nil
-	}
 	payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")
 
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s%s", *fcmUrl, topic), payload)
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s%s", *fcm.url, topic), payload)
 	req.Header.Add("content-type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -31,5 +50,10 @@ func SendNotification(title string, message string, topic string) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (fcm *DebugNotifier) SendNotification(title string, message string, topic string) error {
+	log.Printf("Notification: %s , %s", title, message)
 	return nil
 }

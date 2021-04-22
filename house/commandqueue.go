@@ -46,7 +46,7 @@ func (s *Server) processTimedCommandQueue() error {
 func (s *Server) createTimedCommand(timeout int64, id string, commandId string, command string, name string) error {
 	// Create a queue
 	tc := &TimedCommand{
-		Owner:     id,
+		Owner:     name,
 		Command:   command,
 		ExecuteAt: int64(time.Now().Unix()) + timeout,
 		Executed:  false,
@@ -100,7 +100,7 @@ func (s *Server) processTimedCommand(tc *TimedCommand) error {
 			log.Println(err)
 			return err
 		}
-		err = SendNotification("Scheduled Task", tc.Command, "devices")
+		err = s.notificationClient.SendNotification("Scheduled Task", tc.Command, "devices")
 		if err != nil {
 			log.Println(err)
 		}

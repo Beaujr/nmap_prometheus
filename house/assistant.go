@@ -25,8 +25,8 @@ const (
 )
 
 var (
-	assistantUrl  = flag.String("assistant", "http://assistant_relay", "Google Assistant URL")
-	assistantUser = flag.String("assistantUser", "yourAssistRelayUSer", "Google Assistant Relay User")
+	assistantUrl  = flag.String("assistant", "", "Google Assistant URL eg http://assistant_relay")
+	assistantUser = flag.String("assistantUser", "", "Google Assistant Relay User")
 )
 
 type gaResponse struct {
@@ -40,14 +40,34 @@ type psResponse struct {
 	Text string `json:"text"`
 }
 
-// Call assistant relay with command
-func Call(command string) (*string, error) {
-	if *debug {
-		log.Println(command)
-		return &command, nil
+type GoogleAssistant interface {
+	Call(command string) (*string, error)
+}
+
+func NewAssistant() GoogleAssistant {
+	if *debug || len(*assistantUser) == 0 || len(*assistantUrl) == 0 {
+		return &DebugAssistantRelay{}
 	}
-	payload := strings.NewReader("{\"user\":\"" + *assistantUser + "\",\"command\":\"" + command + "\", \"converse\": false}")
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
+	return &AssistantRelay{url: assistantUrl, path: assistantPath, user: assistantUser}
+}
+
+// Server is an implementation of the proto HomeDetectorServer
+type AssistantRelay struct {
+	GoogleAssistant
+	url  *string
+	path string
+	user *string
+}
+
+// Server is an implementation of the proto HomeDetectorServer
+type DebugAssistantRelay struct {
+	GoogleAssistant
+}
+
+// Call assistant relay with command
+func (ga *AssistantRelay) Call(command string) (*string, error) {
+	payload := strings.NewReader("{\"user\":\"" + *ga.user + "\",\"command\":\"" + command + "\", \"converse\": false}")
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *ga.url, assistantPath), payload)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return nil, err
@@ -78,6 +98,11 @@ func Call(command string) (*string, error) {
 		return &tts, nil
 	}
 	return &assistantResponse.Response, nil
+}
+
+func (ga *DebugAssistantRelay) Call(command string) (*string, error) {
+	log.Println(command)
+	return &command, nil
 }
 
 func downloadFile(url string, command string) (*psResponse, error) {

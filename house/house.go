@@ -73,7 +73,9 @@ type HomeManager interface {
 // Server is an implementation of the proto HomeDetectorServer
 type Server struct {
 	pb.UnimplementedHomeDetectorServer
-	etcdClient etcdv3.KV
+	etcdClient         etcdv3.KV
+	assistantClient    GoogleAssistant
+	notificationClient Notifier
 }
 
 func writeConfig(data []byte, filename string) error {
@@ -104,9 +106,11 @@ func (s ByExecutedAt) Less(i, j int) bool {
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
+	assistantClient := NewAssistant()
+	notifyClient := NewNotifier()
 	metrics = make(map[string]prometheus.Gauge)
 
-	server := &Server{etcdClient: etcdClient}
+	server := &Server{etcdClient: etcdClient, assistantClient: assistantClient, notificationClient: notifyClient}
 	_, err := server.readNetworkConfig()
 	if err != nil {
 		log.Println(err)
@@ -304,7 +308,7 @@ func (s *Server) adjustLights(lightGroup string, brightness string) error {
 }
 
 func (s *Server) callAssistant(command string) (*string, error) {
-	return Call(command)
+	return s.assistantClient.Call(command)
 }
 
 func (s *Server) deviceDetectState(deviceLastSeen int64) int64 {
@@ -360,7 +364,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	}
 
 	log.Println(fmt.Printf("New Device: %s", name))
-	err := SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
+	err := s.notificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
 	if err != nil {
 		return err
 	}
@@ -389,7 +393,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	if incoming.Home != houseDevice.Home {
 		houseDevice.Home = incoming.Home
 		message := fmt.Sprintf("%s has moved to %s", houseDevice.Name, houseDevice.Home)
-		err := SendNotification(houseDevice.Home, message, houseDevice.Home)
+		err := s.notificationClient.SendNotification(houseDevice.Home, message, houseDevice.Home)
 		if err != nil {
 			return err
 		}
@@ -399,7 +403,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 	if timeAway > *timeAwaySeconds {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
 		if houseDevice.Person {
-			err := SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
+			err := s.notificationClient.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
 			if err != nil {
 				return err
 			}
@@ -657,7 +661,7 @@ func (s *Server) deviceManager() error {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
 			if device.Person {
-				err := SendNotification(device.Name, "Has left the house", device.Home)
+				err := s.notificationClient.SendNotification(device.Name, "Has left the house", device.Home)
 				if err != nil {
 					return nil
 				}

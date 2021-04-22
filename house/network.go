@@ -88,23 +88,20 @@ func (s *Server) processPerson(houseDevice *device) error {
 		if err != nil {
 			log.Panic(err.Error())
 		}
-		if *debug {
-			log.Println("House no longer empty")
-		} else {
-			err := SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
-			if err != nil {
-				return err
-			}
-			tcs, err := s.getTc()
-			if err != nil {
-				return err
-			}
-			for key, val := range tcs {
-				if strings.Contains(key, houseDevice.Home) {
-					err = s.deleteTc(val)
-					if err != nil {
-						return err
-					}
+
+		err := s.notificationClient.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
+		if err != nil {
+			return err
+		}
+		tcs, err := s.getTc()
+		if err != nil {
+			return err
+		}
+		for key, val := range tcs {
+			if strings.Contains(key, houseDevice.Home) {
+				err = s.deleteTc(val)
+				if err != nil {
+					return err
 				}
 			}
 		}

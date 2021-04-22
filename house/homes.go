@@ -62,15 +62,13 @@ func (s *Server) toggleHouseStatus(home string, houseEmpty bool) error {
 		log.Println(err)
 		return err
 	}
-	if *debug {
-		log.Printf("House (%s) is Empty(%v)", home, houseEmpty)
-	} else {
-		err := SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
+
+	err = s.notificationClient.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
+	if err != nil {
+		log.Println(err)
+		return err
 	}
+
 	devices, err := s.readNetworkConfig()
 	if err != nil {
 		log.Println(err)
@@ -78,7 +76,7 @@ func (s *Server) toggleHouseStatus(home string, houseEmpty bool) error {
 	}
 	for _, device := range devices {
 		if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
-			err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Name)
+			err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Home)
 			if err != nil {
 				return err
 			}
