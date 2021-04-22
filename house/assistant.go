@@ -40,10 +40,12 @@ type psResponse struct {
 	Text string `json:"text"`
 }
 
+// GoogleAssistant interface for calling smart home api
 type GoogleAssistant interface {
 	Call(command string) (*string, error)
 }
 
+// NewAssistant returns a new assistant client
 func NewAssistant() GoogleAssistant {
 	if *debug || len(*assistantUser) == 0 || len(*assistantUrl) == 0 {
 		return &DebugAssistantRelay{}
@@ -51,7 +53,7 @@ func NewAssistant() GoogleAssistant {
 	return &AssistantRelay{url: assistantUrl, path: assistantPath, user: assistantUser}
 }
 
-// Server is an implementation of the proto HomeDetectorServer
+// AssistantRelay is an implementation of the GoogleAssistant
 type AssistantRelay struct {
 	GoogleAssistant
 	url  *string
@@ -59,7 +61,7 @@ type AssistantRelay struct {
 	user *string
 }
 
-// Server is an implementation of the proto HomeDetectorServer
+// DebugAssistantRelay is an implementation of the GoogleAssistant which only logs
 type DebugAssistantRelay struct {
 	GoogleAssistant
 }
@@ -100,6 +102,7 @@ func (ga *AssistantRelay) Call(command string) (*string, error) {
 	return &assistantResponse.Response, nil
 }
 
+// Call to log the command
 func (ga *DebugAssistantRelay) Call(command string) (*string, error) {
 	log.Println(command)
 	return &command, nil

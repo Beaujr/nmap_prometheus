@@ -11,6 +11,7 @@ import (
 
 var fcmUrl = flag.String("fcm", "", "Google Firbase Cloud Messaging URL eg http://fcmUrl")
 
+// Notifier
 type Notifier interface {
 	SendNotification(title string, message string, topic string) error
 }
