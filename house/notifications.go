@@ -11,11 +11,12 @@ import (
 
 var fcmUrl = flag.String("fcm", "", "Google Firbase Cloud Messaging URL eg http://fcmUrl")
 
-// Notifier
+// Notifier represents and interface for notification sending
 type Notifier interface {
 	SendNotification(title string, message string, topic string) error
 }
 
+// NewNotifier returns a new Notifier
 func NewNotifier() Notifier {
 	if *debug || len(*fcmUrl) == 0 {
 		return &DebugNotifier{}
@@ -23,13 +24,13 @@ func NewNotifier() Notifier {
 	return &FCMNotifier{url: fcmUrl}
 }
 
-// Server is an implementation of the proto HomeDetectorServer
+// FCMNotifier is an implementation of the Notifier
 type FCMNotifier struct {
 	Notifier
 	url *string
 }
 
-// Server is an implementation of the proto HomeDetectorServer
+// FCMNotifier is a log implementation of the Notifier
 type DebugNotifier struct {
 	Notifier
 }
@@ -54,6 +55,7 @@ func (fcm *FCMNotifier) SendNotification(title string, message string, topic str
 	return nil
 }
 
+// SendNotification to log output
 func (fcm *DebugNotifier) SendNotification(title string, message string, topic string) error {
 	log.Printf("Notification: %s , %s", title, message)
 	return nil
