@@ -85,20 +85,23 @@ func (ga *AssistantRelay) Call(command string) (*string, error) {
 	}
 	defer res.Body.Close()
 
-	body, _ := ioutil.ReadAll(res.Body)
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 	assistantResponse := gaResponse{}
 	if err := json.Unmarshal(body, &assistantResponse); err != nil {
 		panic(err)
 	}
 
-	if assistantResponse.Response == "" {
-		ps, err := downloadFile(assistantResponse.Audio, command)
-		if err != nil {
-			return nil, err
-		}
-		tts := ps.Text
-		return &tts, nil
-	}
+	//if assistantResponse.Response == "" {
+	//	ps, err := downloadFile(assistantResponse.Audio, command)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	tts := ps.Text
+	//	return &tts, nil
+	//}
 	return &assistantResponse.Response, nil
 }
 

@@ -40,7 +40,10 @@ func (fcm *FCMNotifier) SendNotification(title string, message string, topic str
 	log.Printf("Notification: %s , %s", title, message)
 	payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")
 
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s%s", *fcm.url, topic), payload)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", *fcm.url, topic), payload)
+	if err != nil {
+		return err
+	}
 	req.Header.Add("content-type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {

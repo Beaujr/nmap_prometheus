@@ -37,6 +37,7 @@ var (
 	etcdServers        = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
 	debug              = flag.Bool("debug", false, "Debug mode")
 	cqEnabled          = flag.Bool("cq", false, "Command Queue Enabled")
+	newDeviceIsPerson  = flag.Bool("newDeviceIsPerson", false, "Track new devices as people")
 )
 
 var bleDevices = []*bleDevice{}
@@ -357,7 +358,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		Id:           networkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
 		Away:         false,
 		LastSeen:     int64(time.Now().Unix()),
-		Person:       false,
+		Person:       *newDeviceIsPerson,
 		Command:      "",
 		Manufacturer: vendor,
 		Home:         in.Home,
