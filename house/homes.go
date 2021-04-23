@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	houseTimeOut    = flag.Int64("absence", 3600, "How long a house is empty (in seconds) before turning off smart devices.")
+	houseTimeOut = flag.Int64("absence", 3600, "How long a house is empty (in seconds) before turning off smart devices.")
 )
 
 type home struct {

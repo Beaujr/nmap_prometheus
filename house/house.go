@@ -544,7 +544,7 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 				Name: "home_detector_grpc_clients",
 				Help: "Number of calls to server endpoint",
 				ConstLabels: prometheus.Labels{
-					
+
 					"name": val[0],
 					"home": home,
 					"type": agentType,
