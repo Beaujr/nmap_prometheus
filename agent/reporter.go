@@ -20,7 +20,7 @@ var (
 	script       = flag.Bool("script", false, "Set to true to run once off scan and report")
 	subnet       = flag.String("subnet", "192.168.1.100-254", "NMAP subnet")
 	address      = flag.String("server", "192.168.1.190:50051", "NMAP Server")
-	Ble          = flag.Bool("ble", false, "Boolean for BLE scanning")
+	bleEnabled   = flag.Bool("ble", false, "Boolean for BLE scanning")
 	home         = flag.String("home", "default", "Agent Location eg: Home, Dads house")
 	timeout      = flag.Int("timeout", 10, "When to timeout connecting to server")
 	netInterface = flag.String("interface", "", "Interface to bind to")
@@ -61,7 +61,7 @@ func NewReporter() Reporter {
 		log.Print(err)
 	}
 	ignoreList := make(map[string]bool)
-	if *Ble {
+	if *bleEnabled {
 		bls, err := NewBeaconScanner()
 		if err != nil {
 			log.Print(err)
