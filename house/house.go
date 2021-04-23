@@ -534,6 +534,10 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 		home = val[0]
 	}
 	if val := headers.Get("client"); len(val) > 0 {
+		agent_type := "nmap"
+		if strings.Compare("Ack", name) == 0 {
+			agent_type = "ble"
+		}
 		promClientMetric := fmt.Sprintf("%s_client", val[0])
 		if metrics[promClientMetric] == nil {
 			metrics[promClientMetric] = promauto.NewGauge(prometheus.GaugeOpts{
@@ -542,6 +546,7 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 				ConstLabels: prometheus.Labels{
 					"name": val[0],
 					"home": home,
+					"type": agent_type,
 				},
 			})
 		}
