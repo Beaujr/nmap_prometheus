@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	pb "github.com/beaujr/nmap_prometheus/proto"
 	"log"
 	"time"
 
@@ -21,56 +20,39 @@ var (
 
 // BleScanner Interface for BleScanner structs for BLE/BL
 type BleScanner interface {
-	report([]pb.AddressRequest, error)
+	Scan() error
+	ChkErr(error)
+	AdvHandler(a ble.Advertisement)
 }
 type beaconScanner struct {
-	*Reporter
+	BleScanner
+	device ble.Device
 }
 
-// Scan inits the HCI bluetooth and reports to the GRPC Server
-func (reporter *Reporter) Scan() error {
+func NewBeaconScanner() (BleScanner, error) {
 	d, err := dev.NewDevice(*device)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ble.SetDefaultDevice(d)
-	bs := beaconScanner{reporter}
-	// Scan for specified durantion, or until interrupted by user.
-	fmt.Printf("Scanning for %s...\n", *du)
+	bls := beaconScanner{device: d}
+	return &bls, nil
+}
+
+//// Scan inits the HCI bluetooth and reports to the GRPC Server
+func (bs *beaconScanner) Scan() error {
 	ctx := ble.WithSigHandler(context.WithTimeout(context.Background(), *du))
-	chkErr(ble.Scan(ctx, *dup, bs.advHandler, nil))
+	bs.ChkErr(ble.Scan(ctx, *dup, bs.AdvHandler, nil))
 	return nil
 }
 
-func (b *beaconScanner) advHandler(a ble.Advertisement) {
-	addresses := make([]*string, 0)
+// Bles is for handling Bluetooth Mac addresses
+func (bs *beaconScanner) AdvHandler(a ble.Advertisement) {
 	mac := a.Addr().String()
-	addresses = append(addresses, &mac)
-	err := b.Reporter.Bles(addresses)
-	if err != nil {
-		log.Panic(err)
-	}
-	//if a.Connectable() {
-	//	fmt.Printf("[%s] C %3d:", a.Addr(), a.RSSI())
-	//} else {
-	//	fmt.Printf("[%s] N %3d:", a.Addr(), a.RSSI())
-	//}
-	//comma := ""
-	//if len(a.LocalName()) > 0 {
-	//	fmt.Printf(" Name: %s", a.LocalName())
-	//	comma = ","
-	//}
-	//if len(a.Services()) > 0 {
-	//	fmt.Printf("%s Svcs: %v", comma, a.Services())
-	//	comma = ","
-	//}
-	//if len(a.ManufacturerData()) > 0 {
-	//	fmt.Printf("%s MD: %X", comma, a.ManufacturerData())
-	//}
-	//fmt.Printf("\n")
+	log.Printf("Mac Address detected: %s", mac)
 }
 
-func chkErr(err error) {
+func (bs *beaconScanner) ChkErr(err error) {
 	switch errors.Cause(err) {
 	case nil:
 	case context.DeadlineExceeded:
