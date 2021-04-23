@@ -1,4 +1,4 @@
-package assistant
+package house
 
 import (
 	"encoding/json"
@@ -25,8 +25,8 @@ const (
 )
 
 var (
-	assistantUrl  = flag.String("assistant", "http://assistant_relay", "Google Assistant URL")
-	assistantUser = flag.String("assistantUser", "yourAssistRelayUSer", "Google Assistant Relay User")
+	assistantUrl  = flag.String("assistant", "", "Google Assistant URL eg http://assistant_relay")
+	assistantUser = flag.String("assistantUser", "", "Google Assistant Relay User")
 )
 
 type gaResponse struct {
@@ -40,10 +40,36 @@ type psResponse struct {
 	Text string `json:"text"`
 }
 
+// GoogleAssistant interface for calling smart home api
+type GoogleAssistant interface {
+	Call(command string) (*string, error)
+}
+
+// NewAssistant returns a new assistant client
+func NewAssistant() GoogleAssistant {
+	if *debug || len(*assistantUser) == 0 || len(*assistantUrl) == 0 {
+		return &DebugAssistantRelay{}
+	}
+	return &AssistantRelay{url: assistantUrl, path: assistantPath, user: assistantUser}
+}
+
+// AssistantRelay is an implementation of the GoogleAssistant
+type AssistantRelay struct {
+	GoogleAssistant
+	url  *string
+	path string
+	user *string
+}
+
+// DebugAssistantRelay is an implementation of the GoogleAssistant which only logs
+type DebugAssistantRelay struct {
+	GoogleAssistant
+}
+
 // Call assistant relay with command
-func Call(command string) (*string, error) {
-	payload := strings.NewReader("{\"user\":\"" + *assistantUser + "\",\"command\":\"" + command + "\", \"converse\": false}")
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *assistantUrl, assistantPath), payload)
+func (ga *AssistantRelay) Call(command string) (*string, error) {
+	payload := strings.NewReader("{\"user\":\"" + *ga.user + "\",\"command\":\"" + command + "\", \"converse\": false}")
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", *ga.url, assistantPath), payload)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return nil, err
@@ -59,23 +85,30 @@ func Call(command string) (*string, error) {
 	}
 	defer res.Body.Close()
 
-	body, _ := ioutil.ReadAll(res.Body)
-	fmt.Println(res)
-	fmt.Println(string(body))
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 	assistantResponse := gaResponse{}
 	if err := json.Unmarshal(body, &assistantResponse); err != nil {
 		panic(err)
 	}
 
-	if assistantResponse.Response == "" {
-		ps, err := downloadFile(assistantResponse.Audio, command)
-		if err != nil {
-			return nil, err
-		}
-		tts := ps.Text
-		return &tts, nil
-	}
+	//if assistantResponse.Response == "" {
+	//	ps, err := downloadFile(assistantResponse.Audio, command)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	tts := ps.Text
+	//	return &tts, nil
+	//}
 	return &assistantResponse.Response, nil
+}
+
+// Call to log the command
+func (ga *DebugAssistantRelay) Call(command string) (*string, error) {
+	log.Println(command)
+	return &command, nil
 }
 
 func downloadFile(url string, command string) (*psResponse, error) {

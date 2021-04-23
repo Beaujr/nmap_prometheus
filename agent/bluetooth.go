@@ -1,11 +1,10 @@
-package bluetooth
+package agent
 
 import (
 	"context"
 	"flag"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
-	reporter "github.com/beaujr/nmap_prometheus/reporter"
 	"log"
 	"time"
 
@@ -25,11 +24,11 @@ type BleScanner interface {
 	report([]pb.AddressRequest, error)
 }
 type beaconScanner struct {
-	*reporter.Reporter
+	*Reporter
 }
 
 // Scan inits the HCI bluetooth and reports to the GRPC Server
-func Scan(reporter *reporter.Reporter) error {
+func (reporter *Reporter) Scan() error {
 	d, err := dev.NewDevice(*device)
 	if err != nil {
 		return err
