@@ -534,9 +534,9 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 		home = val[0]
 	}
 	if val := headers.Get("client"); len(val) > 0 {
-		agent_type := "nmap"
+		agentType := "nmap"
 		if strings.Compare("Ack", name) == 0 {
-			agent_type = "ble"
+			agentType = "ble"
 		}
 		promClientMetric := fmt.Sprintf("%s_client", val[0])
 		if metrics[promClientMetric] == nil {
@@ -544,9 +544,10 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 				Name: "home_detector_grpc_clients",
 				Help: "Number of calls to server endpoint",
 				ConstLabels: prometheus.Labels{
+					
 					"name": val[0],
 					"home": home,
-					"type": agent_type,
+					"type": agentType,
 				},
 			})
 		}
