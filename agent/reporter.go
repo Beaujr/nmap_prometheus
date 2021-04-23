@@ -108,7 +108,7 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 	return nil
 }
 
-// Bles is for handling Bluetooth Mac addresses
+// AdvHandler is for handling Bluetooth Mac addresses while scanning
 func (r *Reporter) AdvHandler(a ble.Advertisement) {
 	mac := a.Addr().String()
 	if val, ok := r.ignoreList[mac]; ok && !val {
@@ -128,6 +128,7 @@ func (r *Reporter) AdvHandler(a ble.Advertisement) {
 	r.ignoreList[mac] = response.Acknowledged
 }
 
+// ProcessNMAP scans the network and reports to nmap server
 func (r *Reporter) ProcessNMAP() {
 	errors := 0
 	for {
@@ -193,7 +194,7 @@ func (r *Reporter) singleReport(addresses []*pb.AddressRequest) error {
 	return nil
 }
 
-//// Scan inits the HCI bluetooth and reports to the GRPC Server
+// Scan inits the HCI bluetooth and reports to the GRPC Server
 func (r *Reporter) Scan() error {
 	// Scan for specified durantion, or until interrupted by user.
 	log.Printf("Scanning for %s...\n", *du)
@@ -202,6 +203,7 @@ func (r *Reporter) Scan() error {
 	return nil
 }
 
+// ProcessBLE scans the Bluetooth and reports to the grpc server
 func (r *Reporter) ProcessBLE() {
 	err := r.Scan()
 	if err != nil {

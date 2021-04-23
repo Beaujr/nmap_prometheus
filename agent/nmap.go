@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-// GoogleAssistant interface for calling smart home api
+// NetScanner interface for Scanning and returning AddressRequests
 type NetScanner interface {
 	Scan() ([]*pb.AddressRequest, error)
 }
 
-// NewAssistant returns a new assistant client
+// NewScanner returns a new NetScanner client
 func NewScanner(home string, subnet string) NetScanner {
 	localAddresses := make(map[string]string)
 	ifaces, err := net.Interfaces()
@@ -46,7 +46,7 @@ func NewScanner(home string, subnet string) NetScanner {
 	return &NetworkScanner{home: home, subnet: subnet, localAddrs: localAddresses}
 }
 
-// AssistantRelay is an implementation of the GoogleAssistant
+// NetworkScanner is an implementation of the NetScanner
 type NetworkScanner struct {
 	NetScanner
 	home       string
