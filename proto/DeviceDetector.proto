@@ -15,14 +15,12 @@ service HomeDetector {
 // The request message containing the user's name.
 message BleRequest {
   string mac = 1;
-  string home = 3;
 }
 
 // The request message containing the user's name.
 message AddressRequest {
   string ip = 1;
   string mac = 2;
-  string home = 3;
 }
 
 message AddressesRequest {

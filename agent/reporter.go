@@ -98,7 +98,6 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 	c, ctx, cancel := r.buildClient()
 	defer cancel()
 	for _, item := range items {
-		item.Home = r.Home
 		response, err := c.Address(ctx, item)
 		if err != nil {
 			return err
@@ -117,7 +116,7 @@ func (r *Reporter) AdvHandler(a ble.Advertisement) {
 	}
 	c, ctx, cancel := r.buildClient()
 	defer cancel()
-	response, err := c.Ack(ctx, &pb.BleRequest{Mac: mac, Home: r.Home})
+	response, err := c.Ack(ctx, &pb.BleRequest{Mac: mac})
 	if err != nil {
 		log.Println(fmt.Sprintf("GRPC Error: %s", err.Error()))
 		return

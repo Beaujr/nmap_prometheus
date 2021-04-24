@@ -93,7 +93,6 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 				item.Mac = address.Addr
 			}
 		}
-		item.Home = ns.home
 		addresses = append(addresses, &item)
 	}
 	return addresses, nil
