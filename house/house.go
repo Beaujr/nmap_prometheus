@@ -334,7 +334,7 @@ func (s *Server) newBleDevice(in *pb.BleRequest) error {
 	return nil
 }
 
-func (s *Server) newDevice(in *pb.AddressRequest) error {
+func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 	name := in.Ip
 	if in.Mac != "" {
 		name = in.Mac
@@ -360,7 +360,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 		Person:       *newDeviceIsPerson,
 		Command:      "",
 		Manufacturer: vendor,
-		Home:         in.Home,
+		Home:         home,
 	}
 
 	log.Println(fmt.Printf("New Device: %s", name))
@@ -377,7 +377,7 @@ func (s *Server) newDevice(in *pb.AddressRequest) error {
 	return nil
 }
 
-func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest) error {
+func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest, home string) error {
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
 	}
@@ -390,8 +390,8 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 		houseDevice.Id.Ip = incoming.Ip
 	}
 
-	if incoming.Home != houseDevice.Home {
-		houseDevice.Home = incoming.Home
+	if home != houseDevice.Home {
+		houseDevice.Home = home
 		message := fmt.Sprintf("%s has moved to %s", houseDevice.Name, houseDevice.Home)
 		err := s.notificationClient.SendNotification(houseDevice.Home, message, houseDevice.Home)
 		if err != nil {
@@ -430,7 +430,7 @@ func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest
 }
 
 // searchForOverlappingDevices Checks if reported device
-func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, error) {
+func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest, home string) (*bool, error) {
 	devices, err := s.readNetworkConfig()
 	if err != nil {
 		return nil, err
@@ -439,7 +439,7 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest) (*bool, erro
 	found := false
 	for _, v := range devices {
 		// on same home and same ip, report it as the one with a mac
-		if v.Id.Ip == in.Ip && v.Home == in.Home && strings.Contains(v.Id.Mac, ":") {
+		if v.Id.Ip == in.Ip && v.Home == home && strings.Contains(v.Id.Mac, ":") {
 			in.Mac = v.Id.Mac
 			found = true
 			return &found, err
@@ -470,8 +470,14 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
-	if incoming.Mac == "" && incoming.Home != "" {
-		incoming.Mac = fmt.Sprintf("%s/%s", incoming.Home, strings.ReplaceAll(in.Ip, ".", "_"))
+	headers, _ := metadata.FromIncomingContext(ctx)
+	home := "unknown"
+	val := headers.Get("home")
+	if len(val) > 0 {
+		home = val[0]
+	}
+	if incoming.Mac == "" && home != "" {
+		incoming.Mac = fmt.Sprintf("%s/%s", home, strings.ReplaceAll(in.Ip, ".", "_"))
 	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
@@ -481,7 +487,7 @@ func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressReque
 		return nil, err
 	}
 	if item.Count == 0 {
-		err := s.newDevice(in)
+		err := s.newDevice(in, home)
 		if err != nil {
 			return nil, err
 		}
@@ -493,7 +499,7 @@ func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressReque
 			return nil, err
 		}
 
-		err = s.existingDevice(exDevice, incoming)
+		err = s.existingDevice(exDevice, incoming, home)
 		if err != nil {
 			return nil, err
 		}
@@ -534,6 +540,10 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 		home = val[0]
 	}
 	if val := headers.Get("client"); len(val) > 0 {
+		agentType := "nmap"
+		if strings.Compare("Ack", name) == 0 {
+			agentType = "ble"
+		}
 		promClientMetric := fmt.Sprintf("%s_client", val[0])
 		if metrics[promClientMetric] == nil {
 			metrics[promClientMetric] = promauto.NewGauge(prometheus.GaugeOpts{
@@ -542,6 +552,7 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 				ConstLabels: prometheus.Labels{
 					"name": val[0],
 					"home": home,
+					"type": agentType,
 				},
 			})
 		}
@@ -588,7 +599,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 		if lastSeen > *bleTimeAwaySeconds {
 			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
 			for _, command := range device.Commands {
-				err = s.createTimedCommand(command.Timeout, device.Id, fmt.Sprintf("%s%v", device.Id, command.Id), command.Command, device.Name)
+				err = s.createTimedCommand(command.Timeout, device.Id, command.Id, command.Command, device.Name)
 				if err != nil {
 					return nil, err
 				}

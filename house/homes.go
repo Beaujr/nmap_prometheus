@@ -2,11 +2,16 @@ package house
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"log"
 	"strconv"
 	"strings"
+)
+
+var (
+	houseTimeOut = flag.Int64("absence", 3600, "How long a house is empty (in seconds) before turning off smart devices.")
 )
 
 type home struct {
@@ -76,7 +81,7 @@ func (s *Server) toggleHouseStatus(home string, houseEmpty bool) error {
 	}
 	for _, device := range devices {
 		if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
-			err = s.createTimedCommand(3600, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Home)
+			err = s.createTimedCommand(*houseTimeOut, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Home)
 			if err != nil {
 				return err
 			}
