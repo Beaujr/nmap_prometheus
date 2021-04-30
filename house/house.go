@@ -582,7 +582,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 		return nil, err
 	}
 	found := item.Count == 1
-	if item.Count == 1 {
+	if found {
 		strDevice := item.Kvs[0].Value
 		var device *bleDevice
 		err = yaml.Unmarshal(strDevice, &device)
@@ -617,6 +617,7 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 	ack, err := s.processIncomingBleAddress(ctx, in)
 	if err != nil {
 		log.Println(err)
+		return &pb.Reply{Acknowledged: true}, nil
 	}
 	return &pb.Reply{Acknowledged: *ack}, nil
 }
