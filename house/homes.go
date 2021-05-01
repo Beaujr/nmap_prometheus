@@ -79,12 +79,14 @@ func (s *Server) toggleHouseStatus(home string, houseEmpty bool) error {
 		log.Println(err)
 		return err
 	}
+	i := int64(0)
 	for _, device := range devices {
 		if device.PresenceAware && strings.Compare(home, device.Home) == 0 {
-			err = s.createTimedCommand(*houseTimeOut, device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Home)
+			err = s.createTimedCommand(*houseTimeOut+(10*i), device.Id.Mac, home, fmt.Sprintf("Turn %s off", device.Name), device.Home)
 			if err != nil {
 				return err
 			}
+			i++
 		}
 	}
 	return err
