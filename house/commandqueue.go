@@ -64,9 +64,24 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 		})
 	}
 	metrics[metricId].Set(float64(timeout))
-	err := s.writeTc(tc)
-	if err != nil {
-		log.Println(err)
+
+	if timeout == 0 {
+		go func() {
+			log.Printf("Executing immediately: %s", tc.Command)
+			err := s.processTimedCommand(tc)
+			if err != nil {
+				log.Printf("error calling assistant: %v", err)
+				err = s.writeTc(tc)
+				if err != nil {
+					log.Printf("failed to schedule action: %v", err)
+				}
+			}
+		}()
+	} else {
+		err := s.writeTc(tc)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

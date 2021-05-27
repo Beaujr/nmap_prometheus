@@ -38,6 +38,7 @@ func NewScanner(home string, subnet string) NetScanner {
 			if ip = addr.(*net.IPNet).IP.To4(); ip != nil {
 				hwAddress := strings.ToUpper(i.HardwareAddr.String())
 				if len(hwAddress) > 0 {
+					log.Printf("Local Interface Mac (%s) Ip (%s)", hwAddress, ip.String())
 					localAddresses[ip.String()] = hwAddress
 				}
 			}
