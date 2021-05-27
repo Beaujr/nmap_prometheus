@@ -47,6 +47,7 @@ var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
 var blesPrefix = "/bles/"
 var tcPrefix = "/cq/"
+var peoplePrefix = "/people/"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{

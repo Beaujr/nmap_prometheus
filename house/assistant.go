@@ -80,7 +80,7 @@ func (ga *AssistantRelay) Call(command string) (*string, error) {
 		log.Printf("Error: %s\n", err)
 		return nil, err
 	}
-	if res == nil {
+	if res == nil || res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("error executing %s", command)
 	}
 	defer res.Body.Close()
