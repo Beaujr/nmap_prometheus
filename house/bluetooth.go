@@ -70,6 +70,30 @@ func (s *Server) readBleConfig() (map[string]*pb.BleDevices, error) {
 	return result, nil
 }
 
+func (s *Server) readBleConfigAsSlice() ([]*pb.BleDevices, error) {
+	var result []*pb.BleDevices
+	result = make([]*pb.BleDevices, 0)
+	items, err := s.etcdClient.Get(context.Background(), blesPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return result, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		val := items.Kvs[i].Value
+		var dev *pb.BleDevices
+		err = yaml.Unmarshal(val, &dev)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, dev)
+		i++
+	}
+	return result, nil
+}
+
 func uniqueBle(devices []*pb.BleDevices) ([]*pb.BleDevices, error) {
 	keys := make(map[string]bool)
 	list := []*pb.BleDevices{}

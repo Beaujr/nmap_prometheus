@@ -22,7 +22,7 @@ type HomeDetectorClient interface {
 	Ack(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error)
 	Address(ctx context.Context, in *AddressRequest, opts ...grpc.CallOption) (*Reply, error)
 	Addresses(ctx context.Context, in *AddressesRequest, opts ...grpc.CallOption) (*Reply, error)
-	ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error)
+	ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TCsResponse, error)
 	ListCommandQueue(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error)
 	DeleteCommandQueue(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error)
 	DeleteTimedCommand(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error)
@@ -64,8 +64,8 @@ func (c *homeDetectorClient) Addresses(ctx context.Context, in *AddressesRequest
 	return out, nil
 }
 
-func (c *homeDetectorClient) ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error) {
-	out := new(CQsResponse)
+func (c *homeDetectorClient) ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TCsResponse, error) {
+	out := new(TCsResponse)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/ListTimedCommands", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ type HomeDetectorServer interface {
 	Ack(context.Context, *BleRequest) (*Reply, error)
 	Address(context.Context, *AddressRequest) (*Reply, error)
 	Addresses(context.Context, *AddressesRequest) (*Reply, error)
-	ListTimedCommands(context.Context, *empty.Empty) (*CQsResponse, error)
+	ListTimedCommands(context.Context, *empty.Empty) (*TCsResponse, error)
 	ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error)
 	DeleteCommandQueue(context.Context, *CqRequest) (*Reply, error)
 	DeleteTimedCommand(context.Context, *CqRequest) (*Reply, error)
@@ -138,7 +138,7 @@ func (UnimplementedHomeDetectorServer) Address(context.Context, *AddressRequest)
 func (UnimplementedHomeDetectorServer) Addresses(context.Context, *AddressesRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Addresses not implemented")
 }
-func (UnimplementedHomeDetectorServer) ListTimedCommands(context.Context, *empty.Empty) (*CQsResponse, error) {
+func (UnimplementedHomeDetectorServer) ListTimedCommands(context.Context, *empty.Empty) (*TCsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTimedCommands not implemented")
 }
 func (UnimplementedHomeDetectorServer) ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error) {
