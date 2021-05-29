@@ -31,7 +31,7 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	return s.processIncomingAddress(ctx, in)
 }
 
-// Address Handler for receiving IP/MAC requests
+// ListCommandQueue Handler for Listing all the TimedCommands
 func (s *Server) ListCommandQueue(ctx context.Context, _ *empty.Empty) (*pb.CQsResponse, error) {
 	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)

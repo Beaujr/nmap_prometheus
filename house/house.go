@@ -21,12 +21,6 @@ import (
 	"time"
 )
 
-//type networkId struct {
-//	Ip   string `json:"ip",yaml:"ip"`
-//	Mac  string `json:"mac",yaml:"mac"`
-//	UUID string `json:"uuid",yaml:"uuid"`
-//}
-
 //IOT iotDevices
 var (
 	timeAwaySeconds    = flag.Int64("timeout", 300, "")
@@ -68,7 +62,6 @@ type HomeManager interface {
 	recordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
 	TimedCommands(w http.ResponseWriter, req *http.Request)
-	Bles(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
 	HomeEmptyState(w http.ResponseWriter, req *http.Request)
 }
@@ -206,24 +199,6 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 // TimedCommands API endpoint
 func (s *Server) TimedCommands(w http.ResponseWriter, req *http.Request) {
 	items, err := s.getTc()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	js, err := json.Marshal(items)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
-	return
-}
-
-// TimedCommands API endpoint
-func (s *Server) Bles(w http.ResponseWriter, req *http.Request) {
-	items, err := s.readBleConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
