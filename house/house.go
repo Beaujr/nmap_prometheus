@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/etcd"
 	pb "github.com/beaujr/nmap_prometheus/proto"
+	"github.com/ghodss/yaml"
 	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc/metadata"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -20,12 +20,6 @@ import (
 	"strings"
 	"time"
 )
-
-type networkId struct {
-	Ip   string `json:"ip",yaml:"ip"`
-	Mac  string `json:"mac",yaml:"mac"`
-	UUID string `json:"uuid",yaml:"uuid"`
-}
 
 //IOT iotDevices
 var (
@@ -39,7 +33,7 @@ var (
 	newDeviceIsPerson  = flag.Bool("newDeviceIsPerson", false, "Track new devices as people")
 )
 
-var bleDevices = []*bleDevice{}
+var bleDevices = []*pb.BleDevices{}
 
 var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
@@ -61,12 +55,13 @@ type HomeManager interface {
 	adjustLights(lightGroup string, brightness string) error
 	deviceDetectState(phone int64) int64
 	deviceManager() error
-	isDeviceOn(iot *device) (bool, error)
+	isDeviceOn(iot *pb.Devices) (bool, error)
 	isHouseEmpty(home string) bool
 	httpHealthCheck(url string) bool
 	iotStatusManager() error
 	recordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
+	TimedCommands(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
 	HomeEmptyState(w http.ResponseWriter, req *http.Request)
 }
@@ -88,7 +83,7 @@ func writeConfig(data []byte, filename string) error {
 }
 
 // TimeCommands implements sort.Interface by providing Less and using the Len and
-type TimeCommands []*TimedCommand
+type TimeCommands []*pb.TimedCommands
 
 // ByExecutedAt implements TimeCommands
 type ByExecutedAt struct{ TimeCommands }
@@ -101,7 +96,7 @@ func (s TimeCommands) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 // Less sorts the array using less than comparison
 func (s ByExecutedAt) Less(i, j int) bool {
-	return s.TimeCommands[i].ExecuteAt < s.TimeCommands[j].ExecuteAt
+	return s.TimeCommands[i].Executeat < s.TimeCommands[j].Executeat
 }
 
 // NewServer new instance of HomeManager
@@ -181,7 +176,7 @@ func NewServer() HomeManager {
 
 // Devices API endpoint to determine devices status
 func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
-	devices := make([]*device, 0)
+	devices := make([]*pb.Devices, 0)
 	items, err := s.readNetworkConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -201,9 +196,27 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
+// TimedCommands API endpoint
+func (s *Server) TimedCommands(w http.ResponseWriter, req *http.Request) {
+	items, err := s.getTc()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	js, err := json.Marshal(items)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+	return
+}
+
 // People API endpoint to determine person device status
 func (s *Server) People(w http.ResponseWriter, req *http.Request) {
-	people := make([]*device, 0)
+	people := make([]*pb.Devices, 0)
 	devices, err := s.readNetworkConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -243,7 +256,7 @@ func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-func (s *Server) registerMetric(item device) {
+func (s *Server) registerMetric(item pb.Devices) {
 	if metrics[item.Name] == nil {
 		metrics[item.Name] = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "home_detector_device",
@@ -319,10 +332,10 @@ func (s *Server) deviceDetectState(deviceLastSeen int64) int64 {
 }
 
 func (s *Server) newBleDevice(in *pb.BleRequest) error {
-	newDevice := bleDevice{
+	newDevice := pb.BleDevices{
 		Id:       in.Mac,
 		LastSeen: int64(time.Now().Unix()),
-		Commands: make([]command, 0),
+		Commands: make([]*pb.Commands, 0),
 	}
 
 	log.Println(fmt.Printf("New BLE Device: %s", in.Mac))
@@ -353,9 +366,9 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 
 	}
 
-	newDevice := device{
+	newDevice := pb.Devices{
 		Name:         strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
-		Id:           networkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
+		Id:           &pb.NetworkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
 		Away:         false,
 		LastSeen:     int64(time.Now().Unix()),
 		Person:       *newDeviceIsPerson,
@@ -365,20 +378,21 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 	}
 
 	log.Println(fmt.Printf("New Device: %s", name))
-	err := s.notificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
-	if err != nil {
-		return err
-	}
 
-	err = s.writeNetworkDevice(&newDevice)
+	err := s.writeNetworkDevice(&newDevice)
 	if err != nil {
 		log.Printf("Error saving to ETCD: %s", err.Error())
+	}
+
+	err = s.notificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
+	if err != nil {
+		log.Printf("Error sending notification: %s", err.Error())
 	}
 	s.registerMetric(newDevice)
 	return nil
 }
 
-func (s *Server) existingDevice(houseDevice *device, incoming *pb.AddressRequest, home string) error {
+func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressRequest, home string) error {
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
 	}
@@ -446,27 +460,7 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest, home string)
 			return &found, err
 		}
 	}
-
-	//if found {
-	//	etcdKey := strings.ReplaceAll(strings.ReplaceAll(in.Ip, ".", "_"), ":", "_")
-	//	_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, etcdKey))
-	//	if err != nil {
-	//		log.Println(err.Error())
-	//	}
-	//	_, err = s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, in.Ip))
-	//	if err != nil {
-	//		log.Println(err.Error())
-	//	}
-	//}
-
 	return &found, err
-}
-
-// Address Handler for receiving IP/MAC requests
-func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	s.grpcHitsMetrics("grpc_address_count", "Address", 1)
-	return s.processIncomingAddress(ctx, in)
 }
 
 func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
@@ -494,7 +488,7 @@ func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressReque
 		}
 	} else {
 		strDevice := item.Kvs[0].Value
-		var exDevice *device
+		var exDevice *pb.Devices
 		err = yaml.Unmarshal(strDevice, &exDevice)
 		if err != nil {
 			return nil, err
@@ -561,19 +555,6 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 	}
 }
 
-// Addresses Handler for receiving array of IP/MAC requests
-func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
-	s.grpcHitsMetrics("grpc_address_count", "Address", len(in.Addresses))
-	for _, addr := range in.Addresses {
-		_, err := s.processIncomingAddress(ctx, addr)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &pb.Reply{Acknowledged: true}, nil
-}
-
 func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleRequest) (*bool, error) {
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
@@ -585,7 +566,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 	found := item.Count == 1
 	if found {
 		strDevice := item.Kvs[0].Value
-		var device *bleDevice
+		var device *pb.BleDevices
 		err = yaml.Unmarshal(strDevice, &device)
 		if err != nil {
 			return nil, err
@@ -600,7 +581,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 		if lastSeen > *bleTimeAwaySeconds {
 			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
 			for _, command := range device.Commands {
-				err = s.createTimedCommand(command.Timeout, device.Id, command.Id, command.Command, device.Name)
+				err = s.createTimedCommand(command.Timeout, device.Id, command.Id, command.Command, device.Id)
 				if err != nil {
 					return nil, err
 				}
@@ -635,7 +616,7 @@ func (s *Server) httpHealthCheck(url string) bool {
 	return res.StatusCode == 200
 }
 
-func (s *Server) isDeviceOn(iot *device) (bool, error) {
+func (s *Server) isDeviceOn(iot *pb.Devices) (bool, error) {
 	lastSeen := s.deviceDetectState(iot.LastSeen)
 	if lastSeen > int64(syncStatusWithGA) {
 		state, err := s.callAssistant(iot.Command)
