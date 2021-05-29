@@ -3,6 +3,7 @@ package house
 import (
 	"context"
 	"fmt"
+	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
 	"log"
@@ -10,21 +11,7 @@ import (
 	"strings"
 )
 
-type device struct {
-	Id                 networkId `json:"id",yaml:"id"`
-	Home               string    `json:"home",yaml:"home"`
-	LastSeen           int64     `json:"lastSeen",yaml:"lastSeen"`
-	Away               bool      `json:"away",yaml:"away"`
-	Name               string    `json:"name",yaml:"name"`
-	Person             bool      `json:"person",yaml:"person"`
-	Command            string    `json:"command",yaml:"command"`
-	Smart              bool      `json:"smart",yaml:"smart"`
-	Manufacturer       string    `json:"manufacturer",yaml:"manufacturer"`
-	SmartStatusCommand string    `json:"gaStatusCmd,omitempty",yaml:"gaStatusCmd,omitempty"`
-	PresenceAware      bool      `json:"aware,omitempty",yaml:"aware,omitempty"`
-}
-
-func writeNetworkDevices(devices map[string]*device) error {
+func writeNetworkDevices(devices map[string]*pb.Devices) error {
 	d1, err := yaml.Marshal(devices)
 	if err != nil {
 		return err
@@ -32,7 +19,7 @@ func writeNetworkDevices(devices map[string]*device) error {
 	return writeConfig(d1, *networkConfigFile)
 }
 
-func (s *Server) writeNetworkDevice(item *device) error {
+func (s *Server) writeNetworkDevice(item *pb.Devices) error {
 	d1, err := yaml.Marshal(item)
 	if err != nil {
 		log.Fatalf(err.Error())
@@ -42,9 +29,9 @@ func (s *Server) writeNetworkDevice(item *device) error {
 	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
-func (s *Server) readNetworkConfig() (map[string]*device, error) {
-	var result map[string]*device
-	result = make(map[string]*device)
+func (s *Server) readNetworkConfig() (map[string]*pb.Devices, error) {
+	var result map[string]*pb.Devices
+	result = make(map[string]*pb.Devices)
 	items, err := s.etcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
@@ -56,7 +43,7 @@ func (s *Server) readNetworkConfig() (map[string]*device, error) {
 	for i < int(items.Count) {
 		val := items.Kvs[i].Value
 		key := items.Kvs[i].Key
-		var dev *device
+		var dev *pb.Devices
 		err = yaml.Unmarshal(val, &dev)
 		if err != nil {
 			return nil, err
@@ -69,7 +56,7 @@ func (s *Server) readNetworkConfig() (map[string]*device, error) {
 	return result, nil
 }
 
-func (s *Server) processPerson(houseDevice *device) error {
+func (s *Server) processPerson(houseDevice *pb.Devices) error {
 	homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
 	houseStatus, err := s.etcdClient.Get(context.Background(), homeKey)
 	if err != nil {

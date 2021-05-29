@@ -1,5 +1,5 @@
 syntax = "proto3";
-
+import "google/protobuf/empty.proto";
 option go_package = "proto";
 
 package proto;
@@ -10,11 +10,48 @@ service HomeDetector {
   rpc Ack (BleRequest) returns (Reply) {}
   rpc Address (AddressRequest) returns (Reply) {}
   rpc Addresses (AddressesRequest) returns (Reply) {}
+  rpc ListTimedCommands (google.protobuf.Empty) returns (CQsResponse) {}
+  rpc ListCommandQueue (google.protobuf.Empty) returns (CQsResponse) {}
+  rpc DeleteCommandQueue (CqRequest) returns (Reply) {}
+  rpc DeleteTimedCommand (CqRequest) returns (Reply) {}
+  rpc CompleteTimedCommand (CqRequest) returns (Reply) {}
 }
 
 // The request message containing the user's name.
 message BleRequest {
   string mac = 1;
+}
+// The request message containing the user's name.
+message CqRequest {
+  string id = 1;
+}
+
+// The request message containing the user's name.
+message TimedCommands {
+  string id = 1;
+  int64 executeat = 2;
+  string owner = 3;
+  string command = 4;
+  bool executed = 5;
+}
+
+// The request message containing the user's name.
+message CQsResponse {
+  repeated TimedCommands cqs = 1;
+}
+
+message BleDevices {
+	string Id = 1;
+	int64 LastSeen = 2;
+	repeated Commands commands = 3;
+	string Name = 4;
+	string Home = 5;
+}
+
+message Commands {
+	int64 Timeout  = 1;
+	string Command  = 2;
+	string Id = 3;
 }
 
 // The request message containing the user's name.
@@ -30,4 +67,24 @@ message AddressesRequest {
 // The response message containing the greetings
 message Reply {
   bool acknowledged = 1;
+}
+
+
+message devices {
+	networkId   Id = 1;
+	string  Home = 2;
+	int64 LastSeen = 3;
+	bool Away = 4;
+	string Name = 5;
+	bool Person= 6;
+	string Command = 7;
+	bool Smart = 8;
+	string Manufacturer = 9;
+	bool PresenceAware = 10;
+}
+
+message networkId {
+	string Ip    = 1;
+	string Mac   = 2;
+	string UUID  = 3;
 }

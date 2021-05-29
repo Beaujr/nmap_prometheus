@@ -2,6 +2,7 @@ package house
 
 import (
 	"fmt"
+	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"log"
@@ -18,7 +19,7 @@ func (s *Server) processTimedCommandQueue() error {
 		log.Println(err)
 		return err
 	}
-	sortedTcs := make([]*TimedCommand, 0)
+	sortedTcs := make([]*pb.TimedCommands, 0)
 	for _, tc := range tcs {
 		sortedTcs = append(sortedTcs, tc)
 	}
@@ -43,12 +44,28 @@ func (s *Server) processTimedCommandQueue() error {
 	return nil
 }
 
-func (s *Server) createTimedCommand(timeout int64, id string, commandId string, command string, name string) error {
-	// Create a queue
-	tc := &TimedCommand{
-		Owner:     name,
+func (s *Server) createTimedCommand(timeout int64, id string, commandId string, command string, owner string) error {
+	if timeout == 0 {
+		go func() {
+			log.Printf("Executing immediately: %s", command)
+			_, err := s.callAssistant(command)
+			log.Printf("Executed")
+			if err != nil {
+				log.Printf("error calling assistant: %v", err)
+				log.Printf("Creating TC instead")
+				err = s.createTimedCommand(1, id, commandId, command, owner)
+				if err != nil {
+					log.Printf("failed to schedule action: %v", err)
+				}
+			}
+		}()
+		return nil
+	}
+	// Create a tc
+	tc := &pb.TimedCommands{
+		Owner:     owner,
 		Command:   command,
-		ExecuteAt: int64(time.Now().Unix()) + timeout,
+		Executeat: int64(time.Now().Unix()) + timeout,
 		Executed:  false,
 		Id:        fmt.Sprintf("%s%v", id, commandId),
 	}
@@ -65,29 +82,15 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 	}
 	metrics[metricId].Set(float64(timeout))
 
-	if timeout == 0 {
-		go func() {
-			log.Printf("Executing immediately: %s", tc.Command)
-			err := s.processTimedCommand(tc)
-			if err != nil {
-				log.Printf("error calling assistant: %v", err)
-				err = s.writeTc(tc)
-				if err != nil {
-					log.Printf("failed to schedule action: %v", err)
-				}
-			}
-		}()
-	} else {
-		err := s.writeTc(tc)
-		if err != nil {
-			return err
-		}
+	err := s.writeTc(tc)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (s *Server) processTimedCommand(tc *TimedCommand) error {
+func (s *Server) processTimedCommand(tc *pb.TimedCommands) error {
 	metricId := fmt.Sprintf("%s%s", metricsKey, tc.Id)
 	if metrics[metricId] == nil {
 		metrics[metricId] = promauto.NewGauge(prometheus.GaugeOpts{
@@ -99,12 +102,12 @@ func (s *Server) processTimedCommand(tc *TimedCommand) error {
 			},
 		})
 	}
-	if tc.ExecuteAt-int64(time.Now().Unix()) > 0 {
-		metrics[metricId].Set(float64(tc.ExecuteAt - int64(time.Now().Unix())))
-	} else if tc.ExecuteAt-int64(time.Now().Unix()) < 0 {
+	if tc.Executeat-int64(time.Now().Unix()) > 0 {
+		metrics[metricId].Set(float64(tc.Executeat - int64(time.Now().Unix())))
+	} else if tc.Executeat-int64(time.Now().Unix()) < 0 {
 		metrics[metricId].Set(float64(0))
 	}
-	if tc.ExecuteAt < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
+	if tc.Executeat < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
 		tc.Executed = true
 		err := s.writeTc(tc)
 		if err != nil {
