@@ -88,8 +88,8 @@ func (s *Server) DeleteTimedCommand(ctx context.Context, request *pb.CqRequest) 
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
-// CompleteTimedCommand Handler for finishing TimedCommands Now!
-func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.CqRequest) (*pb.Reply, error) {
+// CompleteTimedCommands Handler for finishing TimedCommands Now!
+func (s *Server) CompleteTimedCommands(ctx context.Context, request *pb.BleRequest) (*pb.Reply, error) {
 	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	items, err := s.getTc()
@@ -102,7 +102,7 @@ func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.CqRequest
 	}
 	sort.Sort(ByExecutedAt{sortedTcs})
 	for idx, v := range sortedTcs {
-		if v.Owner == request.Id {
+		if v.Owner == request.Mac {
 			v.Executeat = time.Now().Unix() + int64(idx)
 		}
 		err = s.writeTc(v)
@@ -110,5 +110,22 @@ func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.CqRequest
 			return nil, err
 		}
 	}
+	return &pb.Reply{Acknowledged: true}, nil
+}
+
+// CompleteTimedCommand Handler for finishing TimedCommands Now!
+func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.CqRequest) (*pb.Reply, error) {
+	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	item, err := s.getTcById(request.Id)
+	if err != nil {
+		return nil, err
+	}
+	item.Executeat = time.Now().Unix()
+	err = s.writeTc(item)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pb.Reply{Acknowledged: true}, nil
 }

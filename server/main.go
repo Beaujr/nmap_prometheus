@@ -30,7 +30,6 @@ func main() {
 	pb.RegisterHomeDetectorServer(s, server.(pb.HomeDetectorServer))
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/devices", server.Devices)
-	http.HandleFunc("/timedcommands", server.TimedCommands)
 	http.HandleFunc("/people", server.People)
 	http.HandleFunc("/empty", server.HomeEmptyState)
 	go http.ListenAndServe(fmt.Sprintf(":%s", *apiPort), nil)

@@ -25,6 +25,7 @@ var (
 	timeout      = flag.Int("timeout", 10, "When to timeout connecting to server")
 	netInterface = flag.String("interface", "", "Interface to bind to")
 	agentId      = flag.String("agentId", "nmapAgent", "Identify Agent, if left blank will be the Machines ID")
+	apiKey       = flag.String("apikey", "apikey", "API KEY for access")
 )
 
 // Reporter is the struct to handle GRP Comms
@@ -77,6 +78,7 @@ func (r *Reporter) buildClient() (pb.HomeDetectorClient, context.Context, contex
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*(time.Duration(*timeout)))
 	ctx = metadata.AppendToOutgoingContext(ctx, "client", r.id)
 	ctx = metadata.AppendToOutgoingContext(ctx, "home", r.Home)
+	ctx = metadata.AppendToOutgoingContext(ctx, "apikey", *apiKey)
 	return client, ctx, cancelFunc
 }
 
