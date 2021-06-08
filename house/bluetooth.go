@@ -167,6 +167,23 @@ func (s *Server) getTc() (map[string]*pb.TimedCommands, error) {
 	}
 	return result, nil
 }
+
+func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
+	items, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, id), clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items.Count == 0 {
+		return nil, fmt.Errorf("CQ with id:%s not found", id)
+	}
+	var dev *pb.TimedCommands
+	err = yaml.Unmarshal(items.Kvs[0].Value, &dev)
+	if err != nil {
+		return nil, err
+	}
+	return dev, nil
+}
+
 func (s *Server) getTcKeys() ([]*string, error) {
 	var result []*string
 	result = make([]*string, 0)

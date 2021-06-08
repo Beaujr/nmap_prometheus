@@ -61,7 +61,6 @@ type HomeManager interface {
 	iotStatusManager() error
 	recordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
-	TimedCommands(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
 	HomeEmptyState(w http.ResponseWriter, req *http.Request)
 }
@@ -186,24 +185,6 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 		devices = append(devices, device)
 	}
 	js, err := json.Marshal(devices)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
-	return
-}
-
-// TimedCommands API endpoint
-func (s *Server) TimedCommands(w http.ResponseWriter, req *http.Request) {
-	items, err := s.getTc()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	js, err := json.Marshal(items)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
