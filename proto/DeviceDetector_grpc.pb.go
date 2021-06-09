@@ -19,15 +19,16 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HomeDetectorClient interface {
 	// Sends a greeting
-	Ack(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error)
+	Ack(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	Address(ctx context.Context, in *AddressRequest, opts ...grpc.CallOption) (*Reply, error)
 	Addresses(ctx context.Context, in *AddressesRequest, opts ...grpc.CallOption) (*Reply, error)
 	ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TCsResponse, error)
 	ListCommandQueue(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error)
-	DeleteCommandQueue(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error)
-	DeleteTimedCommand(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error)
-	CompleteTimedCommands(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error)
-	CompleteTimedCommand(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error)
+	ListDevices(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DevicesResponse, error)
+	DeleteCommandQueue(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
+	DeleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
+	CompleteTimedCommands(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
+	CompleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 }
 
 type homeDetectorClient struct {
@@ -38,7 +39,7 @@ func NewHomeDetectorClient(cc grpc.ClientConnInterface) HomeDetectorClient {
 	return &homeDetectorClient{cc}
 }
 
-func (c *homeDetectorClient) Ack(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error) {
+func (c *homeDetectorClient) Ack(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/Ack", in, out, opts...)
 	if err != nil {
@@ -83,7 +84,16 @@ func (c *homeDetectorClient) ListCommandQueue(ctx context.Context, in *empty.Emp
 	return out, nil
 }
 
-func (c *homeDetectorClient) DeleteCommandQueue(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error) {
+func (c *homeDetectorClient) ListDevices(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DevicesResponse, error) {
+	out := new(DevicesResponse)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/ListDevices", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *homeDetectorClient) DeleteCommandQueue(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/DeleteCommandQueue", in, out, opts...)
 	if err != nil {
@@ -92,7 +102,7 @@ func (c *homeDetectorClient) DeleteCommandQueue(ctx context.Context, in *CqReque
 	return out, nil
 }
 
-func (c *homeDetectorClient) DeleteTimedCommand(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error) {
+func (c *homeDetectorClient) DeleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/DeleteTimedCommand", in, out, opts...)
 	if err != nil {
@@ -101,7 +111,7 @@ func (c *homeDetectorClient) DeleteTimedCommand(ctx context.Context, in *CqReque
 	return out, nil
 }
 
-func (c *homeDetectorClient) CompleteTimedCommands(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error) {
+func (c *homeDetectorClient) CompleteTimedCommands(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/CompleteTimedCommands", in, out, opts...)
 	if err != nil {
@@ -110,7 +120,7 @@ func (c *homeDetectorClient) CompleteTimedCommands(ctx context.Context, in *BleR
 	return out, nil
 }
 
-func (c *homeDetectorClient) CompleteTimedCommand(ctx context.Context, in *CqRequest, opts ...grpc.CallOption) (*Reply, error) {
+func (c *homeDetectorClient) CompleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/CompleteTimedCommand", in, out, opts...)
 	if err != nil {
@@ -124,15 +134,16 @@ func (c *homeDetectorClient) CompleteTimedCommand(ctx context.Context, in *CqReq
 // for forward compatibility
 type HomeDetectorServer interface {
 	// Sends a greeting
-	Ack(context.Context, *BleRequest) (*Reply, error)
+	Ack(context.Context, *StringRequest) (*Reply, error)
 	Address(context.Context, *AddressRequest) (*Reply, error)
 	Addresses(context.Context, *AddressesRequest) (*Reply, error)
 	ListTimedCommands(context.Context, *empty.Empty) (*TCsResponse, error)
 	ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error)
-	DeleteCommandQueue(context.Context, *CqRequest) (*Reply, error)
-	DeleteTimedCommand(context.Context, *CqRequest) (*Reply, error)
-	CompleteTimedCommands(context.Context, *BleRequest) (*Reply, error)
-	CompleteTimedCommand(context.Context, *CqRequest) (*Reply, error)
+	ListDevices(context.Context, *empty.Empty) (*DevicesResponse, error)
+	DeleteCommandQueue(context.Context, *StringRequest) (*Reply, error)
+	DeleteTimedCommand(context.Context, *StringRequest) (*Reply, error)
+	CompleteTimedCommands(context.Context, *StringRequest) (*Reply, error)
+	CompleteTimedCommand(context.Context, *StringRequest) (*Reply, error)
 	mustEmbedUnimplementedHomeDetectorServer()
 }
 
@@ -140,7 +151,7 @@ type HomeDetectorServer interface {
 type UnimplementedHomeDetectorServer struct {
 }
 
-func (UnimplementedHomeDetectorServer) Ack(context.Context, *BleRequest) (*Reply, error) {
+func (UnimplementedHomeDetectorServer) Ack(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ack not implemented")
 }
 func (UnimplementedHomeDetectorServer) Address(context.Context, *AddressRequest) (*Reply, error) {
@@ -155,16 +166,19 @@ func (UnimplementedHomeDetectorServer) ListTimedCommands(context.Context, *empty
 func (UnimplementedHomeDetectorServer) ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListCommandQueue not implemented")
 }
-func (UnimplementedHomeDetectorServer) DeleteCommandQueue(context.Context, *CqRequest) (*Reply, error) {
+func (UnimplementedHomeDetectorServer) ListDevices(context.Context, *empty.Empty) (*DevicesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDevices not implemented")
+}
+func (UnimplementedHomeDetectorServer) DeleteCommandQueue(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteCommandQueue not implemented")
 }
-func (UnimplementedHomeDetectorServer) DeleteTimedCommand(context.Context, *CqRequest) (*Reply, error) {
+func (UnimplementedHomeDetectorServer) DeleteTimedCommand(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteTimedCommand not implemented")
 }
-func (UnimplementedHomeDetectorServer) CompleteTimedCommands(context.Context, *BleRequest) (*Reply, error) {
+func (UnimplementedHomeDetectorServer) CompleteTimedCommands(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteTimedCommands not implemented")
 }
-func (UnimplementedHomeDetectorServer) CompleteTimedCommand(context.Context, *CqRequest) (*Reply, error) {
+func (UnimplementedHomeDetectorServer) CompleteTimedCommand(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteTimedCommand not implemented")
 }
 func (UnimplementedHomeDetectorServer) mustEmbedUnimplementedHomeDetectorServer() {}
@@ -181,7 +195,7 @@ func RegisterHomeDetectorServer(s grpc.ServiceRegistrar, srv HomeDetectorServer)
 }
 
 func _HomeDetector_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BleRequest)
+	in := new(StringRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -193,7 +207,7 @@ func _HomeDetector_Ack_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/proto.HomeDetector/Ack",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).Ack(ctx, req.(*BleRequest))
+		return srv.(HomeDetectorServer).Ack(ctx, req.(*StringRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -270,8 +284,26 @@ func _HomeDetector_ListCommandQueue_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HomeDetector_ListDevices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).ListDevices(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/ListDevices",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).ListDevices(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HomeDetector_DeleteCommandQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CqRequest)
+	in := new(StringRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -283,13 +315,13 @@ func _HomeDetector_DeleteCommandQueue_Handler(srv interface{}, ctx context.Conte
 		FullMethod: "/proto.HomeDetector/DeleteCommandQueue",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).DeleteCommandQueue(ctx, req.(*CqRequest))
+		return srv.(HomeDetectorServer).DeleteCommandQueue(ctx, req.(*StringRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _HomeDetector_DeleteTimedCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CqRequest)
+	in := new(StringRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -301,13 +333,13 @@ func _HomeDetector_DeleteTimedCommand_Handler(srv interface{}, ctx context.Conte
 		FullMethod: "/proto.HomeDetector/DeleteTimedCommand",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).DeleteTimedCommand(ctx, req.(*CqRequest))
+		return srv.(HomeDetectorServer).DeleteTimedCommand(ctx, req.(*StringRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _HomeDetector_CompleteTimedCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BleRequest)
+	in := new(StringRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -319,13 +351,13 @@ func _HomeDetector_CompleteTimedCommands_Handler(srv interface{}, ctx context.Co
 		FullMethod: "/proto.HomeDetector/CompleteTimedCommands",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).CompleteTimedCommands(ctx, req.(*BleRequest))
+		return srv.(HomeDetectorServer).CompleteTimedCommands(ctx, req.(*StringRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _HomeDetector_CompleteTimedCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CqRequest)
+	in := new(StringRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -337,7 +369,7 @@ func _HomeDetector_CompleteTimedCommand_Handler(srv interface{}, ctx context.Con
 		FullMethod: "/proto.HomeDetector/CompleteTimedCommand",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).CompleteTimedCommand(ctx, req.(*CqRequest))
+		return srv.(HomeDetectorServer).CompleteTimedCommand(ctx, req.(*StringRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -365,6 +397,10 @@ var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListCommandQueue",
 			Handler:    _HomeDetector_ListCommandQueue_Handler,
+		},
+		{
+			MethodName: "ListDevices",
+			Handler:    _HomeDetector_ListDevices_Handler,
 		},
 		{
 			MethodName: "DeleteCommandQueue",

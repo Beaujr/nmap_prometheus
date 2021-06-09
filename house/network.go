@@ -56,6 +56,30 @@ func (s *Server) readNetworkConfig() (map[string]*pb.Devices, error) {
 	return result, nil
 }
 
+func (s *Server) getDevices() ([]*pb.Devices, error) {
+	var result []*pb.Devices
+	result = make([]*pb.Devices, 0)
+	items, err := s.etcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return nil, nil
+	}
+	i := 0
+	for i < int(items.Count) {
+		val := items.Kvs[i].Value
+		var dev *pb.Devices
+		err = yaml.Unmarshal(val, &dev)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, dev)
+		i++
+	}
+	return result, nil
+}
+
 func (s *Server) processPerson(houseDevice *pb.Devices) error {
 	homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
 	houseStatus, err := s.etcdClient.Get(context.Background(), homeKey)
