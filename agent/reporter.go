@@ -118,7 +118,7 @@ func (r *Reporter) AdvHandler(a ble.Advertisement) {
 	}
 	c, ctx, cancel := r.buildClient()
 	defer cancel()
-	response, err := c.Ack(ctx, &pb.BleRequest{Mac: mac})
+	response, err := c.Ack(ctx, &pb.StringRequest{Key: mac})
 	if err != nil {
 		log.Println(fmt.Sprintf("GRPC Error: %s", err.Error()))
 		return

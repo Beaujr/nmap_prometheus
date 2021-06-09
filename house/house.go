@@ -312,14 +312,14 @@ func (s *Server) deviceDetectState(deviceLastSeen int64) int64 {
 	return lastSeen
 }
 
-func (s *Server) newBleDevice(in *pb.BleRequest) error {
+func (s *Server) newBleDevice(in *pb.StringRequest) error {
 	newDevice := pb.BleDevices{
-		Id:       in.Mac,
+		Id:       in.Key,
 		LastSeen: int64(time.Now().Unix()),
 		Commands: make([]*pb.Commands, 0),
 	}
 
-	log.Println(fmt.Printf("New BLE Device: %s", in.Mac))
+	log.Println(fmt.Printf("New BLE Device: %s", in.Key))
 
 	bleDevices = append(bleDevices, &newDevice)
 	_, err := uniqueBle(bleDevices)
@@ -536,11 +536,11 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 	}
 }
 
-func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleRequest) (*bool, error) {
+func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringRequest) (*bool, error) {
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	item, err := s.etcdClient.Get(ctx, fmt.Sprintf("%s%s", blesPrefix, in.Mac), opts...)
+	item, err := s.etcdClient.Get(ctx, fmt.Sprintf("%s%s", blesPrefix, in.Key), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -570,19 +570,6 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 		}
 	}
 	return &found, nil
-}
-
-// Ack for bluetooth reported MAC addresses
-func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
-	s.grpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
-
-	ack, err := s.processIncomingBleAddress(ctx, in)
-	if err != nil {
-		log.Println(err)
-		return &pb.Reply{Acknowledged: true}, nil
-	}
-	return &pb.Reply{Acknowledged: *ack}, nil
 }
 
 func (s *Server) httpHealthCheck(url string) bool {
