@@ -6,10 +6,35 @@ import (
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 )
+
+func readDevicesConfig(filename string) ([]*pb.Devices, error) {
+	// Open our yamlFile
+	yamlFile, err := os.Open(filename)
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		fmt.Println(err)
+	}
+	log.Println(fmt.Sprintf("Successfully Opened: %s", filename))
+	defer yamlFile.Close()
+
+	byteValue, err := ioutil.ReadAll(yamlFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*pb.Devices
+	err = yaml.Unmarshal(byteValue, &result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
 func writeNetworkDevices(devices map[string]*pb.Devices) error {
 	d1, err := yaml.Marshal(devices)
@@ -78,6 +103,14 @@ func (s *Server) getDevices() ([]*pb.Devices, error) {
 		i++
 	}
 	return result, nil
+}
+
+func (s *Server) deleteDeviceById(id string) error {
+	_, err := s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) processPerson(houseDevice *pb.Devices) error {

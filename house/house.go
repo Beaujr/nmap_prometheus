@@ -116,6 +116,11 @@ func NewServer() HomeManager {
 		_ = server.writeBleDevice(item)
 	}
 
+	//devices, _ := readDevicesConfig(*networkConfigFile)
+	//for _, dev := range devices {
+	//	server.writeNetworkDevice(dev)
+	//}
+
 	// Bluetooth
 	_, err = server.readBleConfig()
 	if err != nil {

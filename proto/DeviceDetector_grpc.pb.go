@@ -25,6 +25,8 @@ type HomeDetectorClient interface {
 	ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TCsResponse, error)
 	ListCommandQueue(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error)
 	ListDevices(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DevicesResponse, error)
+	UpdateDevice(ctx context.Context, in *Devices, opts ...grpc.CallOption) (*Reply, error)
+	DeleteDevice(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	DeleteCommandQueue(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	DeleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	CompleteTimedCommands(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
@@ -93,6 +95,24 @@ func (c *homeDetectorClient) ListDevices(ctx context.Context, in *empty.Empty, o
 	return out, nil
 }
 
+func (c *homeDetectorClient) UpdateDevice(ctx context.Context, in *Devices, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/UpdateDevice", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *homeDetectorClient) DeleteDevice(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/DeleteDevice", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *homeDetectorClient) DeleteCommandQueue(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/DeleteCommandQueue", in, out, opts...)
@@ -140,6 +160,8 @@ type HomeDetectorServer interface {
 	ListTimedCommands(context.Context, *empty.Empty) (*TCsResponse, error)
 	ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error)
 	ListDevices(context.Context, *empty.Empty) (*DevicesResponse, error)
+	UpdateDevice(context.Context, *Devices) (*Reply, error)
+	DeleteDevice(context.Context, *StringRequest) (*Reply, error)
 	DeleteCommandQueue(context.Context, *StringRequest) (*Reply, error)
 	DeleteTimedCommand(context.Context, *StringRequest) (*Reply, error)
 	CompleteTimedCommands(context.Context, *StringRequest) (*Reply, error)
@@ -168,6 +190,12 @@ func (UnimplementedHomeDetectorServer) ListCommandQueue(context.Context, *empty.
 }
 func (UnimplementedHomeDetectorServer) ListDevices(context.Context, *empty.Empty) (*DevicesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDevices not implemented")
+}
+func (UnimplementedHomeDetectorServer) UpdateDevice(context.Context, *Devices) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDevice not implemented")
+}
+func (UnimplementedHomeDetectorServer) DeleteDevice(context.Context, *StringRequest) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteDevice not implemented")
 }
 func (UnimplementedHomeDetectorServer) DeleteCommandQueue(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteCommandQueue not implemented")
@@ -302,6 +330,42 @@ func _HomeDetector_ListDevices_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HomeDetector_UpdateDevice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Devices)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).UpdateDevice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/UpdateDevice",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).UpdateDevice(ctx, req.(*Devices))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HomeDetector_DeleteDevice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StringRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).DeleteDevice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/DeleteDevice",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).DeleteDevice(ctx, req.(*StringRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HomeDetector_DeleteCommandQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StringRequest)
 	if err := dec(in); err != nil {
@@ -401,6 +465,14 @@ var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDevices",
 			Handler:    _HomeDetector_ListDevices_Handler,
+		},
+		{
+			MethodName: "UpdateDevice",
+			Handler:    _HomeDetector_UpdateDevice_Handler,
+		},
+		{
+			MethodName: "DeleteDevice",
+			Handler:    _HomeDetector_DeleteDevice_Handler,
 		},
 		{
 			MethodName: "DeleteCommandQueue",
