@@ -13,6 +13,8 @@ service HomeDetector {
   rpc ListTimedCommands (google.protobuf.Empty) returns (TCsResponse) {}
   rpc ListCommandQueue (google.protobuf.Empty) returns (CQsResponse) {}
   rpc ListDevices (google.protobuf.Empty) returns (DevicesResponse) {}
+  rpc UpdateDevice (Devices) returns (Reply) {}
+  rpc DeleteDevice (StringRequest) returns (Reply) {}
   rpc DeleteCommandQueue (StringRequest) returns (Reply) {}
   rpc DeleteTimedCommand (StringRequest) returns (Reply) {}
   rpc CompleteTimedCommands (StringRequest) returns (Reply) {}

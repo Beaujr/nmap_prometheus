@@ -11,6 +11,19 @@ import (
 	"time"
 )
 
+// Ack for bluetooth reported MAC addresses
+func (s *Server) Ack(ctx context.Context, in *pb.StringRequest) (*pb.Reply, error) {
+	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
+	s.grpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
+
+	ack, err := s.processIncomingBleAddress(ctx, in)
+	if err != nil {
+		log.Println(err)
+		return &pb.Reply{Acknowledged: true}, nil
+	}
+	return &pb.Reply{Acknowledged: *ack}, nil
+}
+
 // Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
 	s.grpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
@@ -68,18 +81,6 @@ func (s *Server) ListTimedCommands(ctx context.Context, _ *empty.Empty) (*pb.TCs
 
 // ListDevices lists all the Devices
 func (s *Server) ListDevices(ctx context.Context, _ *empty.Empty) (*pb.DevicesResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
-	devices, err := s.getDevices()
-	if err != nil {
-		log.Printf("Error listing Devices: %v", err)
-		return nil, err
-	}
-	return &pb.DevicesResponse{Devices: devices}, nil
-}
-
-// DeleteDevice deletes a device
-func (s *Server) DeleteDevice(ctx context.Context, _ *empty.Empty) (*pb.DevicesResponse, error) {
 	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	devices, err := s.getDevices()
@@ -151,5 +152,30 @@ func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.StringReq
 		return nil, err
 	}
 
+	return &pb.Reply{Acknowledged: true}, nil
+}
+
+// CompleteTimedCommand Handler for finishing TimedCommands Now!
+func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
+	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	if request.Key == "" {
+		return &pb.Reply{Acknowledged: true}, nil
+	}
+	err := s.deleteDeviceById(request.Key)
+	if err != nil {
+		return &pb.Reply{Acknowledged: false}, err
+	}
+	return &pb.Reply{Acknowledged: true}, nil
+}
+
+// CompleteTimedCommand Handler for finishing TimedCommands Now!
+func (s *Server) UpdateDevice(ctx context.Context, request *pb.Devices) (*pb.Reply, error) {
+	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	err := s.writeNetworkDevice(request)
+	if err != nil {
+		return &pb.Reply{Acknowledged: false}, err
+	}
 	return &pb.Reply{Acknowledged: true}, nil
 }
