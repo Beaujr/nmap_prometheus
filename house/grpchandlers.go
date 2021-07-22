@@ -167,7 +167,7 @@ func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.StringReq
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
-// CompleteTimedCommand Handler for finishing TimedCommands Now!
+// DeleteDevice Handler for deleting Devices
 func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
 	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
@@ -181,7 +181,7 @@ func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
-// CompleteTimedCommand Handler for finishing TimedCommands Now!
+// UpdateDevice Handler for updating Devices
 func (s *Server) UpdateDevice(ctx context.Context, request *pb.Devices) (*pb.Reply, error) {
 	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
