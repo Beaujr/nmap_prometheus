@@ -69,6 +69,10 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 		Executed:  false,
 		Id:        fmt.Sprintf("%s%v", id, commandId),
 	}
+	return s.storeTimedCommand(tc)
+}
+
+func (s *Server) storeTimedCommand(tc *pb.TimedCommands) error {
 	metricId := fmt.Sprintf("%s%s", metricsKey, tc.Id)
 	if metrics[metricId] == nil {
 		metrics[metricId] = promauto.NewGauge(prometheus.GaugeOpts{
@@ -80,7 +84,7 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 			},
 		})
 	}
-	metrics[metricId].Set(float64(timeout))
+	metrics[metricId].Set(float64(tc.Executeat))
 
 	err := s.writeTc(tc)
 	if err != nil {
