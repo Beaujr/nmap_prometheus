@@ -31,6 +31,7 @@ type HomeDetectorClient interface {
 	DeleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	CompleteTimedCommands(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	CompleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
+	CreateTimedCommand(ctx context.Context, in *TimedCommands, opts ...grpc.CallOption) (*Reply, error)
 }
 
 type homeDetectorClient struct {
@@ -149,6 +150,15 @@ func (c *homeDetectorClient) CompleteTimedCommand(ctx context.Context, in *Strin
 	return out, nil
 }
 
+func (c *homeDetectorClient) CreateTimedCommand(ctx context.Context, in *TimedCommands, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/CreateTimedCommand", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HomeDetectorServer is the server API for HomeDetector service.
 // All implementations must embed UnimplementedHomeDetectorServer
 // for forward compatibility
@@ -166,6 +176,7 @@ type HomeDetectorServer interface {
 	DeleteTimedCommand(context.Context, *StringRequest) (*Reply, error)
 	CompleteTimedCommands(context.Context, *StringRequest) (*Reply, error)
 	CompleteTimedCommand(context.Context, *StringRequest) (*Reply, error)
+	CreateTimedCommand(context.Context, *TimedCommands) (*Reply, error)
 	mustEmbedUnimplementedHomeDetectorServer()
 }
 
@@ -208,6 +219,9 @@ func (UnimplementedHomeDetectorServer) CompleteTimedCommands(context.Context, *S
 }
 func (UnimplementedHomeDetectorServer) CompleteTimedCommand(context.Context, *StringRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteTimedCommand not implemented")
+}
+func (UnimplementedHomeDetectorServer) CreateTimedCommand(context.Context, *TimedCommands) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateTimedCommand not implemented")
 }
 func (UnimplementedHomeDetectorServer) mustEmbedUnimplementedHomeDetectorServer() {}
 
@@ -438,6 +452,24 @@ func _HomeDetector_CompleteTimedCommand_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HomeDetector_CreateTimedCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TimedCommands)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).CreateTimedCommand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/CreateTimedCommand",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).CreateTimedCommand(ctx, req.(*TimedCommands))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.HomeDetector",
 	HandlerType: (*HomeDetectorServer)(nil),
@@ -489,6 +521,10 @@ var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteTimedCommand",
 			Handler:    _HomeDetector_CompleteTimedCommand_Handler,
+		},
+		{
+			MethodName: "CreateTimedCommand",
+			Handler:    _HomeDetector_CreateTimedCommand_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

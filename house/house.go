@@ -42,6 +42,7 @@ var homePrefix = "/homes/"
 var blesPrefix = "/bles/"
 var tcPrefix = "/cq/"
 var peoplePrefix = "/people/"
+var notificationsPrefix = "/notifications/"
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -102,7 +103,7 @@ func (s ByExecutedAt) Less(i, j int) bool {
 func NewServer() HomeManager {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
 	assistantClient := NewAssistant()
-	notifyClient := NewNotifier()
+	notifyClient := NewNotifier(etcdClient)
 	metrics = make(map[string]prometheus.Gauge)
 
 	server := &Server{etcdClient: etcdClient, assistantClient: assistantClient, notificationClient: notifyClient}

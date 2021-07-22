@@ -19,6 +19,7 @@ service HomeDetector {
   rpc DeleteTimedCommand (StringRequest) returns (Reply) {}
   rpc CompleteTimedCommands (StringRequest) returns (Reply) {}
   rpc CompleteTimedCommand (StringRequest) returns (Reply) {}
+  rpc CreateTimedCommand (TimedCommands) returns (Reply) {}
 }
 
 // The request message containing the user's name.
