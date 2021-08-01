@@ -3,54 +3,77 @@ package house
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	pb "github.com/beaujr/nmap_prometheus/proto"
+	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
 	"gopkg.in/yaml.v2"
 	"log"
-	"time"
 )
 
-type people struct {
-	Id      string   `json:"id",yaml:"id"`
-	Devices []string `json:"devices",yaml:"devices"`
-	Name    string   `json:"name",yaml:"name"`
+var peoplePrefix = "/people/"
+
+// Notifier represents and interface for notification sending
+type PeopleManager interface {
+	Get() ([]*pb.Person, error)
+	CreateFromDevices(devices []*pb.Devices, name string) error
+	Create(ids []string, name string) error
 }
 
-func (s *Server) createPerson(devices []string, name string) error {
-	// Create a queue
-	person := &people{
-		Name:    name,
-		Devices: devices,
-		Id:      uuid.New().String(),
-	}
-	metricId := fmt.Sprintf("%s%s", metricsKey, person.Id)
-	if metrics[metricId] == nil {
-		metrics[metricId] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_people_devices",
-			Help: "BleDevice in home",
-			ConstLabels: prometheus.Labels{
-				"name": name,
-				"id":   person.Id,
-			},
-		})
-	}
-	metrics[metricId].Set(float64(time.Now().Unix()))
-	err := s.writePerson(person)
+// NewNotifier returns a new Notifier
+func NewPeopleManager(etcdClient etcdv3.KV) PeopleManager {
+	return &EtcdPeopleManager{etcdClient: etcdClient}
+}
+
+// FCMNotifier is an implementation of the Notifier
+type EtcdPeopleManager struct {
+	Notifier
+	etcdClient etcdv3.KV
+}
+
+func (etm *EtcdPeopleManager) Get() ([]*pb.Person, error) {
+	items, err := etm.etcdClient.Get(context.Background(), fmt.Sprintf("%s", peoplePrefix), etcdv3.WithPrefix())
+	people := make([]*pb.Person, 0)
 	if err != nil {
-		log.Println(err)
+		return nil, err
+	}
+	if items == nil {
+		return people, nil
 	}
 
-	return nil
+	for _, person := range items.Kvs {
+		var dev *pb.Person
+		err = yaml.Unmarshal(person.Value, &dev)
+		if err != nil {
+			return nil, err
+		}
+		people = append(people, dev)
+	}
+	return people, nil
 }
 
-func (s *Server) writePerson(person *people) error {
+func (etm *EtcdPeopleManager) CreateFromDevices(devices []*pb.Devices, name string) error {
+	ids := make([]string, 0)
+	for _, item := range devices {
+		ids = append(ids, item.Id.Mac)
+	}
+	return etm.Create(ids, name)
+
+}
+
+func (etm *EtcdPeopleManager) Create(ids []string, name string) error {
+	person := &pb.Person{
+		Name: name,
+		Ids:  ids,
+	}
+	return etm.writePerson(person)
+}
+
+func (etm *EtcdPeopleManager) writePerson(person *pb.Person) error {
 	d1, err := yaml.Marshal(person)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
 
-	key := fmt.Sprintf("%s%s", peoplePrefix, person.Id)
-	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	key := fmt.Sprintf("%s%s", peoplePrefix, person.Name)
+	_, err = etm.etcdClient.Put(context.Background(), key, string(d1))
 	return err
 }

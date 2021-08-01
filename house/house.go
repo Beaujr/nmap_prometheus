@@ -23,14 +23,14 @@ import (
 
 //IOT iotDevices
 var (
-	timeAwaySeconds    = flag.Int64("timeout", 300, "")
-	bleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
-	networkConfigFile  = flag.String("config", "config/devices.yaml", "Path to config file")
-	bleConfigFile      = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
-	etcdServers        = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
-	debug              = flag.Bool("debug", false, "Debug mode")
-	cqEnabled          = flag.Bool("cq", false, "Command Queue Enabled")
-	newDeviceIsPerson  = flag.Bool("newDeviceIsPerson", false, "Track new devices as people")
+	//timeAwaySeconds    = flag.Int64("timeout", 300, "")
+	//bleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
+	networkConfigFile = flag.String("config", "config/devices.yaml", "Path to config file")
+	bleConfigFile     = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
+	etcdServers       = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
+	debug             = flag.Bool("debug", false, "Debug mode")
+	cqEnabled         = flag.Bool("cq", false, "Command Queue Enabled")
+	//newDeviceIsPerson  = flag.Bool("newDeviceIsPerson", false, "Track new devices as people")
 )
 
 var bleDevices = []*pb.BleDevices{}
@@ -41,7 +41,6 @@ var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
 var blesPrefix = "/bles/"
 var tcPrefix = "/cq/"
-var peoplePrefix = "/people/"
 var notificationsPrefix = "/notifications/"
 
 var (
@@ -69,9 +68,11 @@ type HomeManager interface {
 // Server is an implementation of the proto HomeDetectorServer
 type Server struct {
 	pb.UnimplementedHomeDetectorServer
+	config             *pb.ServerConfig
 	etcdClient         etcdv3.KV
 	assistantClient    GoogleAssistant
 	notificationClient Notifier
+	peopleClient       PeopleManager
 }
 
 func writeConfig(data []byte, filename string) error {
@@ -99,18 +100,36 @@ func (s ByExecutedAt) Less(i, j int) bool {
 	return s.TimeCommands[i].Executeat < s.TimeCommands[j].Executeat
 }
 
-// NewServer new instance of HomeManager
-func NewServer() HomeManager {
+func newServer() *Server {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
 	assistantClient := NewAssistant()
-	notifyClient := NewNotifier(etcdClient)
-	metrics = make(map[string]prometheus.Gauge)
-
-	server := &Server{etcdClient: etcdClient, assistantClient: assistantClient, notificationClient: notifyClient}
-	_, err := server.readNetworkConfig()
+	notifyClient := NewNotifier()
+	peopleClient := NewPeopleManager(etcdClient)
+	server := &Server{config: nil, etcdClient: etcdClient, assistantClient: assistantClient, notificationClient: notifyClient, peopleClient: peopleClient}
+	sConfig, err := readServerConfig(etcdClient)
 	if err != nil {
-		log.Println(err)
+		log.Fatalf("%s", err)
 	}
+	server.config = sConfig
+	return server
+}
+
+// NewServer new instance of HomeManager
+func NewServer() HomeManager {
+
+	metrics = make(map[string]prometheus.Gauge)
+	server := newServer()
+
+	//devices, err := server.readNetworkConfig()
+	//if err != nil {
+	//	log.Println(err)
+	//}
+	//
+	//for _, device := range devices {
+	//	if device.Person {
+	//		server.peopleClient.Create([]string{device.Id.GetMac()}, device.GetName())
+	//	}
+	//}
 	// importConfig to etcd
 	bleDevices, _ := readBleConfig(*bleConfigFile)
 	for _, item := range bleDevices {
@@ -123,7 +142,7 @@ func NewServer() HomeManager {
 	//}
 
 	// Bluetooth
-	_, err = server.readBleConfig()
+	_, err := server.readBleConfig()
 	if err != nil {
 		log.Println(err)
 	}
@@ -358,7 +377,7 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 		Id:           &pb.NetworkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
 		Away:         false,
 		LastSeen:     int64(time.Now().Unix()),
-		Person:       *newDeviceIsPerson,
+		Person:       s.config.NewDeviceIsPerson,
 		Command:      "",
 		Manufacturer: vendor,
 		Home:         home,
@@ -379,6 +398,25 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 	return nil
 }
 
+func (s *Server) SendNotification(title string, message string, topic string) error {
+	lastNotification, err := s.getLastSentNotification()
+	currentNotificationKey := fmt.Sprintf("%s%s%s", title, message, topic)
+
+	if lastNotification != nil &&
+		strings.Compare(*lastNotification, currentNotificationKey) == 0 {
+		return nil
+	}
+	err = s.SendNotification(title, message, topic)
+	if err != nil {
+		return err
+	}
+	if err = s.putLastSentNotification(currentNotificationKey); err != nil {
+		log.Printf("failed saving notification: %s with error: %s", currentNotificationKey, err.Error())
+	}
+
+	return nil
+}
+
 func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressRequest, home string) error {
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
@@ -395,17 +433,17 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 	if home != houseDevice.Home {
 		houseDevice.Home = home
 		message := fmt.Sprintf("%s has moved to %s", houseDevice.Name, houseDevice.Home)
-		err := s.notificationClient.SendNotification(houseDevice.Home, message, houseDevice.Home)
+		err := s.SendNotification(houseDevice.Home, message, houseDevice.Home)
 		if err != nil {
 			return err
 		}
 	}
 
 	timeAway := s.deviceDetectState(houseDevice.LastSeen)
-	if timeAway > *timeAwaySeconds {
+	if timeAway > s.config.TimeAwaySeconds {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
 		if houseDevice.Person {
-			err := s.notificationClient.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
+			err := s.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
 			if err != nil {
 				return err
 			}
@@ -565,7 +603,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringReq
 		if err != nil {
 			log.Printf("Error updating BLE device: %s", device.Id)
 		}
-		if lastSeen > *bleTimeAwaySeconds {
+		if lastSeen > s.config.BleTimeAwaySeconds {
 			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
 			for _, command := range device.Commands {
 				err = s.createTimedCommand(command.Timeout, device.Id, command.Id, command.Command, device.Id)
@@ -625,11 +663,11 @@ func (s *Server) deviceManager() error {
 	}
 	for _, device := range devices {
 		timeAway := s.deviceDetectState(device.LastSeen)
-		if timeAway > *timeAwaySeconds && !device.Away {
+		if timeAway > s.config.TimeAwaySeconds && !device.Away {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
 			if device.Person {
-				err := s.notificationClient.SendNotification(device.Name, "Has left the house", device.Home)
+				err := s.SendNotification(device.Name, "Has left the house", device.Home)
 				if err != nil {
 					return nil
 				}
