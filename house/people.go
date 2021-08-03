@@ -11,24 +11,25 @@ import (
 
 var peoplePrefix = "/people/"
 
-// Notifier represents and interface for notification sending
+// PeopleManager represents and interface for People Management
 type PeopleManager interface {
 	Get() ([]*pb.Person, error)
 	CreateFromDevices(devices []*pb.Devices, name string) error
 	Create(ids []string, name string) error
 }
 
-// NewNotifier returns a new Notifier
+// NewPeopleManager returns a new PeopleManager
 func NewPeopleManager(etcdClient etcdv3.KV) PeopleManager {
 	return &EtcdPeopleManager{etcdClient: etcdClient}
 }
 
-// FCMNotifier is an implementation of the Notifier
+// EtcdPeopleManager is an implementation of the Notifier
 type EtcdPeopleManager struct {
 	Notifier
 	etcdClient etcdv3.KV
 }
 
+// EtcdPeopleManager get an array of persons
 func (etm *EtcdPeopleManager) Get() ([]*pb.Person, error) {
 	items, err := etm.etcdClient.Get(context.Background(), fmt.Sprintf("%s", peoplePrefix), etcdv3.WithPrefix())
 	people := make([]*pb.Person, 0)
@@ -50,6 +51,7 @@ func (etm *EtcdPeopleManager) Get() ([]*pb.Person, error) {
 	return people, nil
 }
 
+// CreateFromDevices group devices until a single person
 func (etm *EtcdPeopleManager) CreateFromDevices(devices []*pb.Devices, name string) error {
 	ids := make([]string, 0)
 	for _, item := range devices {
@@ -59,6 +61,7 @@ func (etm *EtcdPeopleManager) CreateFromDevices(devices []*pb.Devices, name stri
 
 }
 
+// Create takes the ID of the devices and saves the person to etcd
 func (etm *EtcdPeopleManager) Create(ids []string, name string) error {
 	person := &pb.Person{
 		Name: name,
