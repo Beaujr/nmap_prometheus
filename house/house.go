@@ -418,6 +418,7 @@ func (s *Server) SendNotification(title string, message string, topic string) er
 	return nil
 }
 
+// existingDevice searches if this device is already on the home / subnet
 func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressRequest, home string) error {
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
