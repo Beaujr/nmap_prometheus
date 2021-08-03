@@ -398,6 +398,7 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 	return nil
 }
 
+// SendNotification sends notification if its not the same as the last one
 func (s *Server) SendNotification(title string, message string, topic string) error {
 	lastNotification, err := s.getLastSentNotification()
 	currentNotificationKey := fmt.Sprintf("%s%s%s", title, message, topic)
