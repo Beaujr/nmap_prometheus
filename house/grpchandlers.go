@@ -192,7 +192,7 @@ func (s *Server) UpdateDevice(ctx context.Context, request *pb.Devices) (*pb.Rep
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
-// UpdateDevice Handler for updating Devices
+// ListPeople Handler for Listing People
 func (s *Server) ListPeople(ctx context.Context, request *empty.Empty) (*pb.People, error) {
 	people, err := s.peopleClient.Get()
 	if err != nil {
