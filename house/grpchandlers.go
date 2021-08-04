@@ -46,8 +46,6 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 
 // ListCommandQueue Handler for Listing all the TimedCommands
 func (s *Server) ListCommandQueue(ctx context.Context, _ *empty.Empty) (*pb.CQsResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	tcs, err := s.getTc()
 	if err != nil {
 		log.Printf("Error listing CQ: %v", err)
