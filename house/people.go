@@ -29,7 +29,7 @@ type EtcdPeopleManager struct {
 	etcdClient etcdv3.KV
 }
 
-// EtcdPeopleManager get an array of persons
+// Get an array of persons
 func (etm *EtcdPeopleManager) Get() ([]*pb.Person, error) {
 	items, err := etm.etcdClient.Get(context.Background(), fmt.Sprintf("%s", peoplePrefix), etcdv3.WithPrefix())
 	people := make([]*pb.Person, 0)
