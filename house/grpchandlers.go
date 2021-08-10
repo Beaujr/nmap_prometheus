@@ -67,8 +67,6 @@ func (s *Server) ListCommandQueue(ctx context.Context, _ *empty.Empty) (*pb.CQsR
 
 // ListTimedCommands lists all the TimedCommands basically the bles
 func (s *Server) ListTimedCommands(ctx context.Context, _ *empty.Empty) (*pb.TCsResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	bles, err := s.readBleConfigAsSlice()
 	if err != nil {
 		log.Printf("Error listing Bles: %v", err)
