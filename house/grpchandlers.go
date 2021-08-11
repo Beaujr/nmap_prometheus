@@ -87,8 +87,6 @@ func (s *Server) ListDevices(ctx context.Context, _ *empty.Empty) (*pb.DevicesRe
 
 // DeleteCommandQueue Deletes an entire job from CommandQueue
 func (s *Server) DeleteCommandQueue(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	_, err := s.etcdClient.Delete(ctx, fmt.Sprintf("%s%s", tcPrefix, request.Key))
 	if err != nil {
 		return nil, err
