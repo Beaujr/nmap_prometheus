@@ -96,8 +96,6 @@ func (s *Server) DeleteCommandQueue(ctx context.Context, request *pb.StringReque
 
 // DeleteTimedCommand Deletes an Individual Timed Command from the CommandQueue
 func (s *Server) DeleteTimedCommand(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	_, err := s.etcdClient.Delete(ctx, fmt.Sprintf("%s%s", tcPrefix, request.Key), etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
