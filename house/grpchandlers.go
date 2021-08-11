@@ -153,7 +153,6 @@ func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.StringReq
 
 // DeleteDevice Handler for deleting Devices
 func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	if request.Key == "" {
 		return &pb.Reply{Acknowledged: true}, nil
