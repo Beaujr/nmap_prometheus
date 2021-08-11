@@ -105,8 +105,6 @@ func (s *Server) DeleteTimedCommand(ctx context.Context, request *pb.StringReque
 
 // CompleteTimedCommands Handler for finishing TimedCommands Now!
 func (s *Server) CompleteTimedCommands(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	items, err := s.getTc()
 	if err != nil {
 		return nil, err
