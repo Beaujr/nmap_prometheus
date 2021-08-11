@@ -77,8 +77,6 @@ func (s *Server) ListTimedCommands(ctx context.Context, _ *empty.Empty) (*pb.TCs
 
 // ListDevices lists all the Devices
 func (s *Server) ListDevices(ctx context.Context, _ *empty.Empty) (*pb.DevicesResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	devices, err := s.getDevices()
 	if err != nil {
 		log.Printf("Error listing Devices: %v", err)
