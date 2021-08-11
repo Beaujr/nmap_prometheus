@@ -128,8 +128,6 @@ func (s *Server) CompleteTimedCommands(ctx context.Context, request *pb.StringRe
 
 // CreateTimedCommand Handler for creating TimedCommands!
 func (s *Server) CreateTimedCommand(ctx context.Context, request *pb.TimedCommands) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	err := s.storeTimedCommand(request)
 	if err != nil {
 		return nil, err
