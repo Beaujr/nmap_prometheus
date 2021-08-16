@@ -165,7 +165,6 @@ func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*
 
 // UpdateDevice Handler for updating Devices
 func (s *Server) UpdateDevice(ctx context.Context, request *pb.Devices) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
 	err := s.writeNetworkDevice(request)
 	if err != nil {
