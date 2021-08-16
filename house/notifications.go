@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var fcmUrl = flag.String("fcm", "", "Google Firbase Cloud Messaging URL eg http://fcmUrl")
+var fcmUrl = flag.String("fcm", "", "Google Firebase Cloud Messaging URL eg http://fcmUrl")
 
 // Notifier represents and interface for notification sending
 type Notifier interface {
@@ -19,18 +19,17 @@ type Notifier interface {
 }
 
 // NewNotifier returns a new Notifier
-func NewNotifier(etcdClient etcdv3.KV) Notifier {
+func NewNotifier() Notifier {
 	if *debug || len(*fcmUrl) == 0 {
 		return &DebugNotifier{}
 	}
-	return &FCMNotifier{url: fcmUrl, etcdClient: etcdClient}
+	return &FCMNotifier{url: fcmUrl}
 }
 
 // FCMNotifier is an implementation of the Notifier
 type FCMNotifier struct {
 	Notifier
-	etcdClient etcdv3.KV
-	url        *string
+	url *string
 }
 
 // DebugNotifier is a log implementation of the Notifier
@@ -38,8 +37,8 @@ type DebugNotifier struct {
 	Notifier
 }
 
-func (fcm *FCMNotifier) getLastSentNotification() (*string, error) {
-	items, err := fcm.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", notificationsPrefix, "last"), etcdv3.WithPrefix())
+func (s *Server) getLastSentNotification() (*string, error) {
+	items, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", notificationsPrefix, "last"), etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +54,8 @@ func (fcm *FCMNotifier) getLastSentNotification() (*string, error) {
 
 }
 
-func (fcm *FCMNotifier) putLastSentNotification(notification string) error {
-	_, err := fcm.etcdClient.Put(context.Background(), fmt.Sprintf("%s%s", notificationsPrefix, "last"), notification)
+func (s *Server) putLastSentNotification(notification string) error {
+	_, err := s.etcdClient.Put(context.Background(), fmt.Sprintf("%s%s", notificationsPrefix, "last"), notification)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -66,14 +65,6 @@ func (fcm *FCMNotifier) putLastSentNotification(notification string) error {
 
 // SendNotification to GCM topic defined in fcmUrl
 func (fcm *FCMNotifier) SendNotification(title string, message string, topic string) error {
-	lastNotification, err := fcm.getLastSentNotification()
-	currentNotificationKey := fmt.Sprintf("%s%s%s", title, message, topic)
-
-	if lastNotification != nil &&
-		strings.Compare(*lastNotification, currentNotificationKey) == 0 {
-		return nil
-	}
-
 	log.Printf("Notification: %s , %s", title, message)
 	payload := strings.NewReader("{ \"title\": \"" + title + "\", \"body\":\"" + message + "\", \"image\": \"\"}")
 
@@ -91,10 +82,6 @@ func (fcm *FCMNotifier) SendNotification(title string, message string, topic str
 	_, err = ioutil.ReadAll(res.Body)
 	if err != nil {
 		return err
-	}
-
-	if err = fcm.putLastSentNotification(currentNotificationKey); err != nil {
-		log.Printf("failed saving notification: %s with error: %s", currentNotificationKey, err.Error())
 	}
 	return nil
 }

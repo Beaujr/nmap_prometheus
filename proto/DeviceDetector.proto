@@ -11,6 +11,7 @@ service HomeDetector {
   rpc Address (AddressRequest) returns (Reply) {}
   rpc Addresses (AddressesRequest) returns (Reply) {}
   rpc ListTimedCommands (google.protobuf.Empty) returns (TCsResponse) {}
+  rpc ListPeople (google.protobuf.Empty) returns (People) {}
   rpc ListCommandQueue (google.protobuf.Empty) returns (CQsResponse) {}
   rpc ListDevices (google.protobuf.Empty) returns (DevicesResponse) {}
   rpc UpdateDevice (Devices) returns (Reply) {}
@@ -34,6 +35,21 @@ message TimedCommands {
   string owner = 3;
   string command = 4;
   bool executed = 5;
+}
+
+message ServerConfig {
+	int64 timeAwaySeconds = 1;
+	int64 bleTimeAwaySeconds = 2;
+	bool newDeviceIsPerson = 3;
+}
+
+message Person {
+	repeated string ids = 1;
+    string name = 2;
+}
+
+message People {
+    repeated Person people = 1;
 }
 
 // The request message containing the user's name.
