@@ -42,6 +42,7 @@ nmap_prometheus:
 		-a -tags netgo \
 		-o $(BINPATH)/${APP_NAME}-$(APP_TYPE) \
 		./
+#	sftp -o "IdentityFile=~/.ssh/raspberry" -oPort=22 nuc@192.168.1.112:/home/nuc/repo <<< $$'put bin/beaujr/nmap_prometheus-client'
 
 go_test:
 ifeq ($(GOARCH),amd64)
@@ -107,11 +108,12 @@ else
 endif
 
 grpcUrl-device:
-	@ grpcurl -plaintext -d '{ "mac":":00:00:00:24:5c:f1", "ip":"192.168.1.2", "home":"aus"}' 192.168.1.190:50011 proto.HomeDetector.Address
+	@grpcurl -plaintext -d '{"addresses": [{"ip":"192.168.1.220", "mac":"BE:6D:C8:C9:2B:0B"}]}' -H "Host: grpc.beau.cf" -H "Home: aus" -H "Client: mbp" 192.168.1.112:50051 proto.HomeDetector.Addresses
 
 grpcUrl-ble:
-	@ grpcurl -plaintext -d '{ "mac":"00:00:00:24:5c:f1", "home":"wst"}' 192.168.1.190:50011 proto.HomeDetector.Ack
+	@grpcurl -v -plaintext -d '{ "key":"0c:f3:ee:04:36:c0"}' -use-reflection=false -proto=proto/DeviceDetector.proto -H="Content-Type: application/grpc" -H "Home: aus" -H "Client: mbp"  192.168.1.112:50051 proto.HomeDetector.Ack
 
+#grpcurl -v -plaintext -d '{ "id": "1", "executeat": 2, "owner": "3", "command": "turn salt on", "executed": false }' -use-reflection=false -proto=proto/DeviceDetector.proto -H="Content-Type: application/grpc" -H "Home: aus" -H "Client: mbp"  192.168.1.112:50051 proto.HomeDetector.CreateTimedCommand
 docker-login: check-docker-credentials
 	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASS) $(REGISTRY)
 
@@ -123,4 +125,4 @@ score:
 	-H 'token: $(GITHUB_TOKEN)'
 
 proto:
-	protoc --proto_path=proto --go_out=proto/ --go-grpc_out=proto/ proto/DeviceDetector.proto
+	protoc -I $GOPATH/pkg/mod/github.com/srikrsna/protoc-gen-gotag@v0.5.0/ --proto_path=proto --go_out=proto/ --go-grpc_out=proto/ proto/DeviceDetector.proto

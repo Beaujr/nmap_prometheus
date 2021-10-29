@@ -542,11 +542,12 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 	}
 }
 
-func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringRequest) (*bool, error) {
+func (s *Server) getBLEById(id *string) (*pb.BleDevices, error) {
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	item, err := s.etcdClient.Get(ctx, fmt.Sprintf("%s%s", blesPrefix, in.Key), opts...)
+	log.Println(fmt.Sprintf("%s%s", blesPrefix, *id))
+	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", blesPrefix, *id), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +559,21 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringReq
 		if err != nil {
 			return nil, err
 		}
+		return device, nil
+	}
+	return nil, nil
+}
 
+func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringRequest) (*bool, error) {
+	device, err := s.getBLEById(&in.Key)
+	if err != nil {
+		return nil, err
+	}
+	found := device != nil
+	if !found {
+		return &found, nil
+	}
+	if found {
 		lastSeen := s.deviceDetectState(device.LastSeen)
 		device.LastSeen = int64(time.Now().Unix())
 		err := s.writeBleDevice(device)

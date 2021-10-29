@@ -55,6 +55,7 @@ message BleDevices {
 	repeated Commands commands = 3;
 	string Name = 4;
 	string Home = 5;
+	bool tile = 6;
 }
 
 message Commands {
