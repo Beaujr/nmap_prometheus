@@ -79,18 +79,18 @@ func (fcm *FCMNotifier) SendNotification(title string, message string, topic str
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", *fcm.url, topic), payload)
 	if err != nil {
-		return err
+		log.Println(err.Error())
 	}
 	req.Header.Add("content-type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		log.Println(err.Error())
 	}
 
 	defer res.Body.Close()
 	_, err = ioutil.ReadAll(res.Body)
 	if err != nil {
-		return err
+		log.Println(err.Error())
 	}
 
 	if err = fcm.putLastSentNotification(currentNotificationKey); err != nil {
