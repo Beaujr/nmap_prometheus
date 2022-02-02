@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -50,15 +51,16 @@ func NewAssistant() GoogleAssistant {
 	if *debug || len(*assistantUser) == 0 || len(*assistantUrl) == 0 {
 		return &DebugAssistantRelay{}
 	}
-	return &AssistantRelay{url: assistantUrl, path: assistantPath, user: assistantUser}
+	return &AssistantRelay{url: assistantUrl, path: assistantPath, user: assistantUser, QuoteLimitReached: nil}
 }
 
 // AssistantRelay is an implementation of the GoogleAssistant
 type AssistantRelay struct {
 	GoogleAssistant
-	url  *string
-	path string
-	user *string
+	url               *string
+	path              string
+	user              *string
+	QuoteLimitReached *time.Time
 }
 
 // DebugAssistantRelay is an implementation of the GoogleAssistant which only logs
@@ -75,17 +77,25 @@ func (ga *AssistantRelay) Call(command string) (*string, error) {
 		return nil, err
 	}
 	req.Header.Add("content-type", "application/json")
+	// its been less than an hour since our quota was hit
+	if ga.QuoteLimitReached != nil && time.Now().Unix() < ga.QuoteLimitReached.Add(time.Hour).Unix() {
+		return nil, fmt.Errorf("quota reached retry in: %d seconds", ga.QuoteLimitReached.Add(time.Hour).Unix()-time.Now().Unix())
+	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return nil, err
 	}
 	if res == nil || res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error executing %s", command)
+		return nil, fmt.Errorf("error executing %s with error code: %s", res.StatusCode)
 	}
 	defer res.Body.Close()
 
 	body, err := ioutil.ReadAll(res.Body)
+	if strings.Contains(string(body), "RESOURCE_EXHAUSTED") {
+		hitAt := time.Now()
+		ga.QuoteLimitReached = &hitAt
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +112,7 @@ func (ga *AssistantRelay) Call(command string) (*string, error) {
 	//	tts := ps.Text
 	//	return &tts, nil
 	//}
+	ga.QuoteLimitReached = nil
 	return &assistantResponse.Response, nil
 }
 
