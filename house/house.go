@@ -53,7 +53,6 @@ var (
 
 // HomeManager manages devices and metric collection
 type HomeManager interface {
-	adjustLights(lightGroup string, brightness string) error
 	deviceDetectState(phone int64) int64
 	deviceManager() error
 	isDeviceOn(iot *pb.Devices) (bool, error)
@@ -299,13 +298,6 @@ func (s *Server) recordMetrics() {
 			time.Sleep(2 * time.Second)
 		}
 	}()
-}
-func (s *Server) adjustLights(lightGroup string, brightness string) error {
-	_, err := s.callAssistant("set " + lightGroup + " lights to " + brightness + "% brightness")
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (s *Server) callAssistant(command string) (*string, error) {
