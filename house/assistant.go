@@ -86,16 +86,16 @@ func (ga *AssistantRelay) Call(command string) (*string, error) {
 		log.Printf("Error: %s\n", err)
 		return nil, err
 	}
+	if res.StatusCode == http.StatusInternalServerError {
+		hitAt := time.Now()
+		ga.QuoteLimitReached = &hitAt
+	}
 	if res == nil || res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error executing %s with error code: %s", res.StatusCode)
+		return nil, fmt.Errorf("error executing %s with error code: %d", command, res.StatusCode)
 	}
 	defer res.Body.Close()
 
 	body, err := ioutil.ReadAll(res.Body)
-	if strings.Contains(string(body), "RESOURCE_EXHAUSTED") {
-		hitAt := time.Now()
-		ga.QuoteLimitReached = &hitAt
-	}
 	if err != nil {
 		return nil, err
 	}
