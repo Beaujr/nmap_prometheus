@@ -28,8 +28,8 @@ func (s *Server) processTimedCommandQueue() error {
 		err = s.processTimedCommand(tc)
 		if err != nil {
 			log.Println(err)
-			tc.Executed = false
-			err = s.writeTc(tc)
+			//tc.Executed = false
+			//err = s.writeTc(tc)
 			return err
 		}
 	}
@@ -112,24 +112,24 @@ func (s *Server) processTimedCommand(tc *pb.TimedCommands) error {
 		metrics[metricId].Set(float64(0))
 	}
 	if tc.Executeat < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
-		tc.Executed = true
-		err := s.writeTc(tc)
-		if err != nil {
-			log.Println(err)
-		}
-		_, err = s.callAssistant(tc.Command)
+		_, err := s.callAssistant(tc.Command)
 		if err != nil {
 			log.Println(err)
 			return err
-		}
-		err = s.notificationClient.SendNotification("Scheduled Task", tc.Command, "devices")
-		if err != nil {
-			log.Println(err)
 		}
 		err = s.deleteTc(tc)
 		if err != nil {
 			log.Println(err)
 		}
+		//err = s.writeTc(tc)
+		//if err != nil {
+		//	log.Println(err)
+		//}
+		err = s.notificationClient.SendNotification("Scheduled Task", tc.Command, "devices")
+		if err != nil {
+			log.Println(err)
+		}
+
 	}
 	return nil
 }

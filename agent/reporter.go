@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"log"
+	"math"
 	"net"
 	"time"
 )
@@ -112,6 +113,8 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 // AdvHandler is for handling Bluetooth Mac addresses while scanning
 func (r *Reporter) AdvHandler(a ble.Advertisement) {
 	mac := a.Addr().String()
+	distance := math.Pow(10, float64((a.TxPowerLevel()-a.RSSI())/(10*2)))
+	log.Printf("Mac: %s, Manufacturer: %s, Distance: %vm", mac, string(a.ManufacturerData()), distance)
 	if val, ok := r.ignoreList[mac]; ok && !val {
 		log.Println(fmt.Sprintf("Not reporting ble: %s", mac))
 		return

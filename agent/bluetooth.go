@@ -51,7 +51,7 @@ func (bs *beaconScanner) Scan() error {
 // AdvHandler is for handling Bluetooth Mac addresses
 func (bs *beaconScanner) AdvHandler(a ble.Advertisement) {
 	mac := a.Addr().String()
-	log.Printf("Mac Address detected: %s", mac)
+	log.Printf("Mac Address detected: %s, signal strength: %d", mac, a.TxPowerLevel())
 }
 
 // ChkErr controls the error channel while scanning ble
