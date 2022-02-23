@@ -12,7 +12,7 @@ import (
 )
 
 // Ack for bluetooth reported MAC addresses
-func (s *Server) Ack(ctx context.Context, in *pb.StringRequest) (*pb.Reply, error) {
+func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
 	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
 	s.grpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
 	ack, err := s.processIncomingBleAddress(ctx, in)

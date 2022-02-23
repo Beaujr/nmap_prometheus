@@ -556,7 +556,7 @@ func (s *Server) getBLEById(id *string) (*pb.BleDevices, error) {
 	return nil, nil
 }
 
-func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringRequest) (*bool, error) {
+func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleRequest) (*bool, error) {
 	device, err := s.getBLEById(&in.Key)
 	if err != nil {
 		return nil, err
@@ -568,6 +568,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.StringReq
 	if found {
 		lastSeen := s.deviceDetectState(device.LastSeen)
 		device.LastSeen = int64(time.Now().Unix())
+		device.Distance = in.Distance
 		err := s.writeBleDevice(device)
 		if err != nil {
 			log.Printf("Error updating BLE device: %s", device.Id)

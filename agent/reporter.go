@@ -113,15 +113,16 @@ func (r *Reporter) Address(items []*pb.AddressRequest) error {
 // AdvHandler is for handling Bluetooth Mac addresses while scanning
 func (r *Reporter) AdvHandler(a ble.Advertisement) {
 	mac := a.Addr().String()
-	distance := math.Pow(10, float64((a.TxPowerLevel()-a.RSSI())/(10*2)))
-	log.Printf("Mac: %s, Manufacturer: %s, Distance: %vm", mac, string(a.ManufacturerData()), distance)
+	numerator := -69 - a.RSSI()
+	distance := float64(math.Pow(10, float64(numerator)/float64(10)))
+	log.Printf("Mac: %s, Distance: %v RSSI: %d\n", mac, distance, a.RSSI())
 	if val, ok := r.ignoreList[mac]; ok && !val {
 		log.Println(fmt.Sprintf("Not reporting ble: %s", mac))
 		return
 	}
 	c, ctx, cancel := r.buildClient()
 	defer cancel()
-	response, err := c.Ack(ctx, &pb.StringRequest{Key: mac})
+	response, err := c.Ack(ctx, &pb.BleRequest{Key: mac, Distance: float32(distance)})
 	if err != nil {
 		log.Println(fmt.Sprintf("GRPC Error: %s", err.Error()))
 		return

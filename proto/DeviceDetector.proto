@@ -7,7 +7,7 @@ package proto;
 // The greeting service definition.
 service HomeDetector {
   // Sends a greeting
-  rpc Ack (StringRequest) returns (Reply) {}
+  rpc Ack (BleRequest) returns (Reply) {}
   rpc Address (AddressRequest) returns (Reply) {}
   rpc Addresses (AddressesRequest) returns (Reply) {}
   rpc ListTimedCommands (google.protobuf.Empty) returns (TCsResponse) {}
@@ -25,6 +25,12 @@ service HomeDetector {
 // The request message containing the user's name.
 message StringRequest {
   string key = 1;
+}
+
+// The request message containing the user's name.
+message BleRequest {
+  string key = 1;
+  float distance = 2;
 }
 
 // The request message containing the user's name.
@@ -56,6 +62,7 @@ message BleDevices {
 	string Name = 4;
 	string Home = 5;
 	bool tile = 6;
+	float distance = 7;
 }
 
 message Commands {

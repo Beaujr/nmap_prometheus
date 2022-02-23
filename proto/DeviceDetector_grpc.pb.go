@@ -4,10 +4,10 @@ package proto
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -19,12 +19,12 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HomeDetectorClient interface {
 	// Sends a greeting
-	Ack(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
+	Ack(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error)
 	Address(ctx context.Context, in *AddressRequest, opts ...grpc.CallOption) (*Reply, error)
 	Addresses(ctx context.Context, in *AddressesRequest, opts ...grpc.CallOption) (*Reply, error)
-	ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TCsResponse, error)
-	ListCommandQueue(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error)
-	ListDevices(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DevicesResponse, error)
+	ListTimedCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*TCsResponse, error)
+	ListCommandQueue(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CQsResponse, error)
+	ListDevices(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DevicesResponse, error)
 	UpdateDevice(ctx context.Context, in *Devices, opts ...grpc.CallOption) (*Reply, error)
 	DeleteDevice(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	DeleteCommandQueue(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
@@ -42,7 +42,7 @@ func NewHomeDetectorClient(cc grpc.ClientConnInterface) HomeDetectorClient {
 	return &homeDetectorClient{cc}
 }
 
-func (c *homeDetectorClient) Ack(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
+func (c *homeDetectorClient) Ack(ctx context.Context, in *BleRequest, opts ...grpc.CallOption) (*Reply, error) {
 	out := new(Reply)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/Ack", in, out, opts...)
 	if err != nil {
@@ -69,7 +69,7 @@ func (c *homeDetectorClient) Addresses(ctx context.Context, in *AddressesRequest
 	return out, nil
 }
 
-func (c *homeDetectorClient) ListTimedCommands(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TCsResponse, error) {
+func (c *homeDetectorClient) ListTimedCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*TCsResponse, error) {
 	out := new(TCsResponse)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/ListTimedCommands", in, out, opts...)
 	if err != nil {
@@ -78,7 +78,7 @@ func (c *homeDetectorClient) ListTimedCommands(ctx context.Context, in *empty.Em
 	return out, nil
 }
 
-func (c *homeDetectorClient) ListCommandQueue(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CQsResponse, error) {
+func (c *homeDetectorClient) ListCommandQueue(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CQsResponse, error) {
 	out := new(CQsResponse)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/ListCommandQueue", in, out, opts...)
 	if err != nil {
@@ -87,7 +87,7 @@ func (c *homeDetectorClient) ListCommandQueue(ctx context.Context, in *empty.Emp
 	return out, nil
 }
 
-func (c *homeDetectorClient) ListDevices(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DevicesResponse, error) {
+func (c *homeDetectorClient) ListDevices(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DevicesResponse, error) {
 	out := new(DevicesResponse)
 	err := c.cc.Invoke(ctx, "/proto.HomeDetector/ListDevices", in, out, opts...)
 	if err != nil {
@@ -164,12 +164,12 @@ func (c *homeDetectorClient) CreateTimedCommand(ctx context.Context, in *TimedCo
 // for forward compatibility
 type HomeDetectorServer interface {
 	// Sends a greeting
-	Ack(context.Context, *StringRequest) (*Reply, error)
+	Ack(context.Context, *BleRequest) (*Reply, error)
 	Address(context.Context, *AddressRequest) (*Reply, error)
 	Addresses(context.Context, *AddressesRequest) (*Reply, error)
-	ListTimedCommands(context.Context, *empty.Empty) (*TCsResponse, error)
-	ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error)
-	ListDevices(context.Context, *empty.Empty) (*DevicesResponse, error)
+	ListTimedCommands(context.Context, *emptypb.Empty) (*TCsResponse, error)
+	ListCommandQueue(context.Context, *emptypb.Empty) (*CQsResponse, error)
+	ListDevices(context.Context, *emptypb.Empty) (*DevicesResponse, error)
 	UpdateDevice(context.Context, *Devices) (*Reply, error)
 	DeleteDevice(context.Context, *StringRequest) (*Reply, error)
 	DeleteCommandQueue(context.Context, *StringRequest) (*Reply, error)
@@ -184,7 +184,7 @@ type HomeDetectorServer interface {
 type UnimplementedHomeDetectorServer struct {
 }
 
-func (UnimplementedHomeDetectorServer) Ack(context.Context, *StringRequest) (*Reply, error) {
+func (UnimplementedHomeDetectorServer) Ack(context.Context, *BleRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ack not implemented")
 }
 func (UnimplementedHomeDetectorServer) Address(context.Context, *AddressRequest) (*Reply, error) {
@@ -193,13 +193,13 @@ func (UnimplementedHomeDetectorServer) Address(context.Context, *AddressRequest)
 func (UnimplementedHomeDetectorServer) Addresses(context.Context, *AddressesRequest) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Addresses not implemented")
 }
-func (UnimplementedHomeDetectorServer) ListTimedCommands(context.Context, *empty.Empty) (*TCsResponse, error) {
+func (UnimplementedHomeDetectorServer) ListTimedCommands(context.Context, *emptypb.Empty) (*TCsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTimedCommands not implemented")
 }
-func (UnimplementedHomeDetectorServer) ListCommandQueue(context.Context, *empty.Empty) (*CQsResponse, error) {
+func (UnimplementedHomeDetectorServer) ListCommandQueue(context.Context, *emptypb.Empty) (*CQsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListCommandQueue not implemented")
 }
-func (UnimplementedHomeDetectorServer) ListDevices(context.Context, *empty.Empty) (*DevicesResponse, error) {
+func (UnimplementedHomeDetectorServer) ListDevices(context.Context, *emptypb.Empty) (*DevicesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDevices not implemented")
 }
 func (UnimplementedHomeDetectorServer) UpdateDevice(context.Context, *Devices) (*Reply, error) {
@@ -237,7 +237,7 @@ func RegisterHomeDetectorServer(s grpc.ServiceRegistrar, srv HomeDetectorServer)
 }
 
 func _HomeDetector_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StringRequest)
+	in := new(BleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -249,7 +249,7 @@ func _HomeDetector_Ack_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/proto.HomeDetector/Ack",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).Ack(ctx, req.(*StringRequest))
+		return srv.(HomeDetectorServer).Ack(ctx, req.(*BleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -291,7 +291,7 @@ func _HomeDetector_Addresses_Handler(srv interface{}, ctx context.Context, dec f
 }
 
 func _HomeDetector_ListTimedCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -303,13 +303,13 @@ func _HomeDetector_ListTimedCommands_Handler(srv interface{}, ctx context.Contex
 		FullMethod: "/proto.HomeDetector/ListTimedCommands",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).ListTimedCommands(ctx, req.(*empty.Empty))
+		return srv.(HomeDetectorServer).ListTimedCommands(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _HomeDetector_ListCommandQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -321,13 +321,13 @@ func _HomeDetector_ListCommandQueue_Handler(srv interface{}, ctx context.Context
 		FullMethod: "/proto.HomeDetector/ListCommandQueue",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).ListCommandQueue(ctx, req.(*empty.Empty))
+		return srv.(HomeDetectorServer).ListCommandQueue(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _HomeDetector_ListDevices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -339,7 +339,7 @@ func _HomeDetector_ListDevices_Handler(srv interface{}, ctx context.Context, dec
 		FullMethod: "/proto.HomeDetector/ListDevices",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HomeDetectorServer).ListDevices(ctx, req.(*empty.Empty))
+		return srv.(HomeDetectorServer).ListDevices(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
