@@ -26,23 +26,23 @@ func (s *Server) writeHome(id string, item *home) error {
 	}
 
 	key := fmt.Sprintf("%s%s", homePrefix, id)
-	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	_, err = s.EtcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
 
 func (s *Server) iotStatusManager() error {
-	gHouseEmpty, err := s.readHomesConfig()
+	gHouseEmpty, err := s.ReadHomesConfig()
 	if err != nil {
 		return err
 	}
 	for home, empty := range gHouseEmpty {
-		if houseEmpty := s.isHouseEmpty(home); houseEmpty != *empty {
-			err = s.toggleHouseStatus(home, houseEmpty)
+		if houseEmpty := s.IsHouseEmpty(home); houseEmpty != *empty {
+			err = s.ToggleHouseStatus(home, houseEmpty)
 			if err != nil {
 				return err
 			}
 		}
-		if !s.isHouseEmpty(home) {
+		if !s.IsHouseEmpty(home) {
 			keys, err := s.getTcKeys()
 			if err != nil {
 				return err
@@ -61,20 +61,20 @@ func (s *Server) iotStatusManager() error {
 	return nil
 }
 
-func (s *Server) toggleHouseStatus(home string, houseEmpty bool) error {
-	_, err := s.etcdClient.Put(context.Background(), fmt.Sprintf("%s%s", homePrefix, home), strconv.FormatBool(houseEmpty))
+func (s *Server) ToggleHouseStatus(home string, houseEmpty bool) error {
+	_, err := s.EtcdClient.Put(context.Background(), fmt.Sprintf("%s%s", homePrefix, home), strconv.FormatBool(houseEmpty))
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
-	err = s.notificationClient.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
+	err = s.NotificationClient.SendNotification("House Empty", fmt.Sprintf("No Humans in %s", home), home)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
-	devices, err := s.readNetworkConfig()
+	devices, err := s.ReadNetworkConfig()
 	if err != nil {
 		log.Println(err)
 		return err

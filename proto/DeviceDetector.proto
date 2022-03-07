@@ -33,6 +33,21 @@ message BleRequest {
   float distance = 2;
 }
 
+message MQTTAddressRequest {
+    MQTTAgent agent = 1;
+    repeated AddressRequest addresses = 2;
+}
+
+message MQTTBleRequest {
+    MQTTAgent agent = 1;
+    BleRequest bles = 2;
+}
+
+message MQTTAgent {
+    string home = 1;
+    string id = 2;
+}
+
 // The request message containing the user's name.
 message TimedCommands {
   string id = 1;

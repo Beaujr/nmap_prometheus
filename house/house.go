@@ -39,7 +39,7 @@ var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]prometheus.Gauge
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
-var blesPrefix = "/bles/"
+var BlesPrefix = "/bles/"
 var tcPrefix = "/cq/"
 var peoplePrefix = "/people/"
 var notificationsPrefix = "/notifications/"
@@ -56,10 +56,10 @@ type HomeManager interface {
 	deviceDetectState(phone int64) int64
 	deviceManager() error
 	isDeviceOn(iot *pb.Devices) (bool, error)
-	isHouseEmpty(home string) bool
+	IsHouseEmpty(home string) bool
 	httpHealthCheck(url string) bool
 	iotStatusManager() error
-	recordMetrics()
+	RecordMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
 	HomeEmptyState(w http.ResponseWriter, req *http.Request)
@@ -68,9 +68,9 @@ type HomeManager interface {
 // Server is an implementation of the proto HomeDetectorServer
 type Server struct {
 	pb.UnimplementedHomeDetectorServer
-	etcdClient         etcdv3.KV
-	assistantClient    GoogleAssistant
-	notificationClient Notifier
+	EtcdClient         etcdv3.KV
+	AssistantClient    GoogleAssistant
+	NotificationClient Notifier
 }
 
 func writeConfig(data []byte, filename string) error {
@@ -97,16 +97,23 @@ func (s TimeCommands) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s ByExecutedAt) Less(i, j int) bool {
 	return s.TimeCommands[i].Executeat < s.TimeCommands[j].Executeat
 }
+func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
+	return Server{
+		UnimplementedHomeDetectorServer: pb.UnimplementedHomeDetectorServer{},
+		EtcdClient:                      e,
+		AssistantClient:                 g,
+		NotificationClient:              n,
+	}
+}
 
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
 	etcdClient := etcd.NewClient([]string{*etcdServers})
 	assistantClient := NewAssistant()
 	notifyClient := NewNotifier(etcdClient)
-	metrics = make(map[string]prometheus.Gauge)
 
-	server := &Server{etcdClient: etcdClient, assistantClient: assistantClient, notificationClient: notifyClient}
-	_, err := server.readNetworkConfig()
+	server := &Server{EtcdClient: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient}
+	_, err := server.ReadNetworkConfig()
 	if err != nil {
 		log.Println(err)
 	}
@@ -122,7 +129,7 @@ func NewServer() HomeManager {
 	//}
 
 	// Bluetooth
-	_, err = server.readBleConfig()
+	_, err = server.ReadBleConfig()
 	if err != nil {
 		log.Println(err)
 	}
@@ -139,12 +146,12 @@ func NewServer() HomeManager {
 		}
 	})
 	c.AddFunc("* */1 * * * *", func() {
-		knowDevices, err := server.readNetworkConfig()
+		knowDevices, err := server.ReadNetworkConfig()
 		if err != nil {
 			log.Printf(err.Error())
 		}
 		for _, val := range knowDevices {
-			server.registerMetric(*val)
+			server.RegisterMetric(*val)
 		}
 	})
 	c.AddFunc("*/10 * * * * *", func() {
@@ -154,34 +161,34 @@ func NewServer() HomeManager {
 		}
 	})
 
-	knowDevices, err := server.readNetworkConfig()
+	knowDevices, err := server.ReadNetworkConfig()
 	if err != nil {
 		log.Printf(err.Error())
 	}
 	homes := make([]string, 0)
 	for _, item := range knowDevices {
 		log.Println(fmt.Sprintf("Registering metric for %s", item.Name))
-		server.registerMetric(*item)
+		server.RegisterMetric(*item)
 		homes = append(homes, item.Home)
 	}
 
 	for _, home := range homes {
 		homeKey := fmt.Sprintf("%s%s", homePrefix, home)
-		_, err := server.etcdClient.Put(context.Background(), homeKey, strconv.FormatBool(server.isHouseEmpty(home)))
+		_, err := server.EtcdClient.Put(context.Background(), homeKey, strconv.FormatBool(server.IsHouseEmpty(home)))
 		if err != nil {
 			log.Panic(err.Error())
 		}
 	}
 
 	c.Start()
-	server.recordMetrics()
+	server.RecordMetrics()
 	return server
 }
 
 // Devices API endpoint to determine devices status
 func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 	devices := make([]*pb.Devices, 0)
-	items, err := s.readNetworkConfig()
+	items, err := s.ReadNetworkConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -203,7 +210,7 @@ func (s *Server) Devices(w http.ResponseWriter, req *http.Request) {
 // People API endpoint to determine person device status
 func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 	people := make([]*pb.Devices, 0)
-	devices, err := s.readNetworkConfig()
+	devices, err := s.ReadNetworkConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -226,7 +233,7 @@ func (s *Server) People(w http.ResponseWriter, req *http.Request) {
 
 // HomeEmptyState API endpoint to determine house empty status
 func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
-	homes, err := s.readHomesConfig()
+	homes, err := s.ReadHomesConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -241,8 +248,11 @@ func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
 	w.Write(js)
 	return
 }
+func init() {
+	metrics = make(map[string]prometheus.Gauge)
+}
 
-func (s *Server) registerMetric(item pb.Devices) {
+func (s *Server) RegisterMetric(item pb.Devices) {
 	if metrics[item.Name] == nil {
 		metrics[item.Name] = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "home_detector_device",
@@ -268,10 +278,10 @@ func (s *Server) registerMetric(item pb.Devices) {
 	}
 }
 
-func (s *Server) recordMetrics() {
+func (s *Server) RecordMetrics() {
 	go func() {
 		for {
-			knowDevices, err := s.readNetworkConfig()
+			knowDevices, err := s.ReadNetworkConfig()
 			if err != nil {
 				log.Printf(err.Error())
 			}
@@ -301,7 +311,7 @@ func (s *Server) recordMetrics() {
 }
 
 func (s *Server) callAssistant(command string) (*string, error) {
-	return s.assistantClient.Call(command)
+	return s.AssistantClient.Call(command)
 }
 
 func (s *Server) deviceDetectState(deviceLastSeen int64) int64 {
@@ -363,11 +373,11 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 		log.Printf("Error saving to ETCD: %s", err.Error())
 	}
 
-	err = s.notificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
+	err = s.NotificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
 	if err != nil {
 		log.Printf("Error sending notification: %s", err.Error())
 	}
-	s.registerMetric(newDevice)
+	s.RegisterMetric(newDevice)
 	return nil
 }
 
@@ -387,7 +397,7 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 	if home != houseDevice.Home {
 		houseDevice.Home = home
 		message := fmt.Sprintf("%s has moved to %s", houseDevice.Name, houseDevice.Home)
-		err := s.notificationClient.SendNotification(houseDevice.Home, message, houseDevice.Home)
+		err := s.NotificationClient.SendNotification(houseDevice.Home, message, houseDevice.Home)
 		if err != nil {
 			return err
 		}
@@ -397,7 +407,7 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 	if timeAway > *timeAwaySeconds {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
 		if houseDevice.Person {
-			err := s.notificationClient.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
+			err := s.NotificationClient.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
 			if err != nil {
 				return err
 			}
@@ -425,7 +435,7 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 
 // searchForOverlappingDevices Checks if reported device
 func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest, home string) (*bool, error) {
-	devices, err := s.readNetworkConfig()
+	devices, err := s.ReadNetworkConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +452,7 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest, home string)
 	return &found, err
 }
 
-func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
+func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
 	headers, _ := metadata.FromIncomingContext(ctx)
 	home := "unknown"
@@ -456,7 +466,7 @@ func (s *Server) processIncomingAddress(ctx context.Context, in *pb.AddressReque
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	item, err := s.etcdClient.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
+	item, err := s.EtcdClient.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -538,8 +548,8 @@ func (s *Server) getBLEById(id *string) (*pb.BleDevices, error) {
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	log.Println(fmt.Sprintf("%s%s", blesPrefix, *id))
-	item, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", blesPrefix, *id), opts...)
+	log.Println(fmt.Sprintf("%s%s", BlesPrefix, *id))
+	item, err := s.EtcdClient.Get(context.Background(), fmt.Sprintf("%s%s", BlesPrefix, *id), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -612,9 +622,9 @@ func (s *Server) isDeviceOn(iot *pb.Devices) (bool, error) {
 	return !iot.Away, nil
 }
 
-func (s *Server) isHouseEmpty(home string) bool {
+func (s *Server) IsHouseEmpty(home string) bool {
 	houseEmpty := true
-	devices, err := s.readNetworkConfig()
+	devices, err := s.ReadNetworkConfig()
 	if err != nil {
 		log.Println("Failed to read from etcd")
 	}
@@ -627,7 +637,7 @@ func (s *Server) isHouseEmpty(home string) bool {
 }
 
 func (s *Server) deviceManager() error {
-	devices, err := s.readNetworkConfig()
+	devices, err := s.ReadNetworkConfig()
 	if err != nil {
 		log.Println("Failed to read from etcd")
 	}
@@ -637,7 +647,7 @@ func (s *Server) deviceManager() error {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
 			if device.Person {
-				err := s.notificationClient.SendNotification(device.Name, "Has left the house", device.Home)
+				err := s.NotificationClient.SendNotification(device.Name, "Has left the house", device.Home)
 				if err != nil {
 					return nil
 				}

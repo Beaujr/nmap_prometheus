@@ -125,7 +125,7 @@ func (s *Server) processTimedCommand(tc *pb.TimedCommands) error {
 		//if err != nil {
 		//	log.Println(err)
 		//}
-		err = s.notificationClient.SendNotification("Scheduled Task", tc.Command, "devices")
+		err = s.NotificationClient.SendNotification("Scheduled Task", tc.Command, "devices")
 		if err != nil {
 			log.Println(err)
 		}

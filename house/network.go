@@ -51,13 +51,13 @@ func (s *Server) writeNetworkDevice(item *pb.Devices) error {
 	}
 
 	key := fmt.Sprintf("%s%s", devicesPrefix, item.Id.UUID)
-	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	_, err = s.EtcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
-func (s *Server) readNetworkConfig() (map[string]*pb.Devices, error) {
+func (s *Server) ReadNetworkConfig() (map[string]*pb.Devices, error) {
 	var result map[string]*pb.Devices
 	result = make(map[string]*pb.Devices)
-	items, err := s.etcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (s *Server) readNetworkConfig() (map[string]*pb.Devices, error) {
 func (s *Server) getDevices() ([]*pb.Devices, error) {
 	var result []*pb.Devices
 	result = make([]*pb.Devices, 0)
-	items, err := s.etcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *Server) getDevices() ([]*pb.Devices, error) {
 }
 
 func (s *Server) deleteDeviceById(id string) error {
-	_, err := s.etcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
+	_, err := s.EtcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
 	if err != nil {
 		return err
 	}
@@ -115,25 +115,25 @@ func (s *Server) deleteDeviceById(id string) error {
 
 func (s *Server) processPerson(houseDevice *pb.Devices) error {
 	homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-	houseStatus, err := s.etcdClient.Get(context.Background(), homeKey)
+	houseStatus, err := s.EtcdClient.Get(context.Background(), homeKey)
 	if err != nil {
 		log.Panic(err.Error())
 	}
 
 	if houseStatus.Count == 0 {
 		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
+		_, err = s.EtcdClient.Put(context.Background(), homeKey, "false")
 		if err != nil {
 			log.Panic(err.Error())
 		}
 	} else if val, err := strconv.ParseBool(string(houseStatus.Kvs[0].Value)); val && err == nil {
 		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		_, err = s.etcdClient.Put(context.Background(), homeKey, "false")
+		_, err = s.EtcdClient.Put(context.Background(), homeKey, "false")
 		if err != nil {
 			log.Panic(err.Error())
 		}
 
-		err := s.notificationClient.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
+		err := s.NotificationClient.SendNotification(houseDevice.Home, "No longer Empty", houseDevice.Home)
 		if err != nil {
 			return err
 		}
@@ -153,10 +153,10 @@ func (s *Server) processPerson(houseDevice *pb.Devices) error {
 	return nil
 }
 
-func (s *Server) readHomesConfig() (map[string]*bool, error) {
+func (s *Server) ReadHomesConfig() (map[string]*bool, error) {
 	var result map[string]*bool
 	result = make(map[string]*bool)
-	items, err := s.etcdClient.Get(context.Background(), homePrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), homePrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +171,11 @@ func (s *Server) readHomesConfig() (map[string]*bool, error) {
 		boolVal, _ := strconv.ParseBool(string(val))
 		if strings.Contains(string(key), "//") {
 			key2 := strings.ReplaceAll(string(key), "//", "")
-			_, err := s.etcdClient.Put(context.Background(), key2, string(val))
+			_, err := s.EtcdClient.Put(context.Background(), key2, string(val))
 			if err != nil {
 				return nil, err
 			}
-			_, err = s.etcdClient.Delete(context.Background(), string(key))
+			_, err = s.EtcdClient.Delete(context.Background(), string(key))
 			if err != nil {
 				return nil, err
 			}

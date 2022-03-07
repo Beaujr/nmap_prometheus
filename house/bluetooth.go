@@ -43,10 +43,10 @@ func readBleConfig(filename string) ([]*pb.BleDevices, error) {
 	return result, nil
 }
 
-func (s *Server) readBleConfig() (map[string]*pb.BleDevices, error) {
+func (s *Server) ReadBleConfig() (map[string]*pb.BleDevices, error) {
 	var result map[string]*pb.BleDevices
 	result = make(map[string]*pb.BleDevices)
-	items, err := s.etcdClient.Get(context.Background(), blesPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), BlesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (s *Server) readBleConfig() (map[string]*pb.BleDevices, error) {
 			return nil, err
 		}
 		strKey := string(key)
-		newKey := strings.ReplaceAll(strKey, blesPrefix, "")
+		newKey := strings.ReplaceAll(strKey, BlesPrefix, "")
 		result[string(newKey)] = dev
 		i++
 	}
@@ -73,7 +73,7 @@ func (s *Server) readBleConfig() (map[string]*pb.BleDevices, error) {
 func (s *Server) readBleConfigAsSlice() ([]*pb.BleDevices, error) {
 	var result []*pb.BleDevices
 	result = make([]*pb.BleDevices, 0)
-	items, err := s.etcdClient.Get(context.Background(), blesPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), BlesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +115,8 @@ func (s *Server) writeBleDevice(item *pb.BleDevices) error {
 		log.Fatalf(err.Error())
 	}
 
-	key := fmt.Sprintf("%s%s", blesPrefix, item.Id)
-	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	key := fmt.Sprintf("%s%s", BlesPrefix, item.Id)
+	_, err = s.EtcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
 
@@ -127,7 +127,7 @@ func (s *Server) writeTc(item *pb.TimedCommands) error {
 	}
 
 	key := fmt.Sprintf("%s%s", tcPrefix, item.Id)
-	_, err = s.etcdClient.Put(context.Background(), key, string(d1))
+	_, err = s.EtcdClient.Put(context.Background(), key, string(d1))
 	return err
 }
 
@@ -137,14 +137,14 @@ func (s *Server) deleteTc(item *pb.TimedCommands) error {
 }
 
 func (s *Server) deleteTcByKey(key string) error {
-	_, err := s.etcdClient.Delete(context.Background(), key)
+	_, err := s.EtcdClient.Delete(context.Background(), key)
 	return err
 }
 
 func (s *Server) getTc() (map[string]*pb.TimedCommands, error) {
 	var result map[string]*pb.TimedCommands
 	result = make(map[string]*pb.TimedCommands)
-	items, err := s.etcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Server) getTc() (map[string]*pb.TimedCommands, error) {
 }
 
 func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
-	items, err := s.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, id), clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, id), clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
 func (s *Server) getTcKeys() ([]*string, error) {
 	var result []*string
 	result = make([]*string, 0)
-	items, err := s.etcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix(), clientv3.WithKeysOnly())
+	items, err := s.EtcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix(), clientv3.WithKeysOnly())
 	if err != nil {
 		return nil, err
 	}
