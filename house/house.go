@@ -98,12 +98,47 @@ func (s ByExecutedAt) Less(i, j int) bool {
 	return s.TimeCommands[i].Executeat < s.TimeCommands[j].Executeat
 }
 func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
-	return Server{
+	s := Server{
 		UnimplementedHomeDetectorServer: pb.UnimplementedHomeDetectorServer{},
 		EtcdClient:                      e,
 		AssistantClient:                 g,
 		NotificationClient:              n,
 	}
+	createCrons(&s)
+	return s
+}
+
+func createCrons(server *Server) {
+	c := cron.New(cron.WithSeconds())
+	c.AddFunc("*/10 * * * * *", func() {
+		err := server.deviceManager()
+		if err != nil {
+			log.Println(err)
+		}
+		err = server.iotStatusManager()
+		if err != nil {
+			log.Println(err)
+		}
+	})
+	c.AddFunc("* */1 * * * *", func() {
+		knowDevices, err := server.ReadNetworkConfig()
+		if err != nil {
+			log.Printf(err.Error())
+		}
+		for _, val := range knowDevices {
+			server.RegisterMetric(*val)
+		}
+	})
+	if *cqEnabled {
+		c.AddFunc("*/10 * * * * *", func() {
+			err := server.processTimedCommandQueue()
+			if err != nil {
+				log.Println(err)
+			}
+		})
+	}
+	c.Start()
+	return
 }
 
 // NewServer new instance of HomeManager
@@ -134,33 +169,6 @@ func NewServer() HomeManager {
 		log.Println(err)
 	}
 
-	c := cron.New(cron.WithSeconds())
-	c.AddFunc("*/10 * * * * *", func() {
-		err := server.deviceManager()
-		if err != nil {
-			log.Println(err)
-		}
-		err = server.iotStatusManager()
-		if err != nil {
-			log.Println(err)
-		}
-	})
-	c.AddFunc("* */1 * * * *", func() {
-		knowDevices, err := server.ReadNetworkConfig()
-		if err != nil {
-			log.Printf(err.Error())
-		}
-		for _, val := range knowDevices {
-			server.RegisterMetric(*val)
-		}
-	})
-	c.AddFunc("*/10 * * * * *", func() {
-		err := server.processTimedCommandQueue()
-		if err != nil {
-			log.Println(err)
-		}
-	})
-
 	knowDevices, err := server.ReadNetworkConfig()
 	if err != nil {
 		log.Printf(err.Error())
@@ -179,8 +187,7 @@ func NewServer() HomeManager {
 			log.Panic(err.Error())
 		}
 	}
-
-	c.Start()
+	createCrons(server)
 	server.RecordMetrics()
 	return server
 }

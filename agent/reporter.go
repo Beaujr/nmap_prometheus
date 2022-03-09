@@ -22,7 +22,7 @@ var (
 	subnet       = flag.String("subnet", "192.168.1.100-254", "NMAP subnet")
 	address      = flag.String("server", "192.168.1.190:50051", "NMAP Server")
 	bleEnabled   = flag.Bool("ble", false, "Boolean for BLE scanning")
-	home         = flag.String("home", "default", "Agent Location eg: Home, Dads house")
+	Home         = flag.String("home", "default", "Agent Location eg: Home, Dads house")
 	timeout      = flag.Int("timeout", 10, "When to timeout connecting to server")
 	netInterface = flag.String("interface", "", "Interface to bind to")
 	agentId      = flag.String("agentId", "nmapAgent", "Identify Agent, if left blank will be the Machines ID")
@@ -68,10 +68,10 @@ func NewReporter() Reporter {
 		if err != nil {
 			log.Print(err)
 		}
-		return Reporter{BleScanner: bls, Home: *home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nil}
+		return Reporter{BleScanner: bls, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nil}
 	}
-	nmapScanner := NewScanner(*home, *subnet)
-	return Reporter{BleScanner: nil, Home: *home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nmapScanner}
+	nmapScanner := NewScanner()
+	return Reporter{BleScanner: nil, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nmapScanner}
 
 }
 func (r *Reporter) buildClient() (pb.HomeDetectorClient, context.Context, context.CancelFunc) {

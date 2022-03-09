@@ -16,7 +16,7 @@ type NetScanner interface {
 }
 
 // NewScanner returns a new NetScanner client
-func NewScanner(home string, subnet string) NetScanner {
+func NewScanner() NetScanner {
 	localAddresses := make(map[string]string)
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -44,7 +44,7 @@ func NewScanner(home string, subnet string) NetScanner {
 			}
 		}
 	}
-	return &NetworkScanner{home: home, subnet: subnet, localAddrs: localAddresses}
+	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses}
 }
 
 // NetworkScanner is an implementation of the NetScanner
