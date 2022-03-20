@@ -6,6 +6,7 @@ import (
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -90,10 +91,14 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 					item.Mac = val
 				}
 				continue
-			} else {
-				item.Mac = address.Addr
 			}
+			item.Mac = address.Addr
 		}
+		rstt, err := strconv.Atoi(host.Times.SRTT)
+		if err != nil {
+			rstt = 1000
+		}
+		item.Distance = float32(rstt / 1000)
 		addresses = append(addresses, &item)
 	}
 	return addresses, nil

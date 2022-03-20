@@ -28,8 +28,6 @@ func (s *Server) processTimedCommandQueue() error {
 		err = s.processTimedCommand(tc)
 		if err != nil {
 			log.Println(err)
-			//tc.Executed = false
-			//err = s.writeTc(tc)
 			return err
 		}
 	}

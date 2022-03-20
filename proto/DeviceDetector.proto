@@ -90,6 +90,7 @@ message Commands {
 message AddressRequest {
   string ip = 1;
   string mac = 2;
+  float distance = 3;
 }
 
 message AddressesRequest {
@@ -113,6 +114,7 @@ message Devices {
 	bool Smart = 8;
 	string Manufacturer = 9;
 	bool PresenceAware = 10;
+	float Latency = 11;
 }
 
 message networkId {

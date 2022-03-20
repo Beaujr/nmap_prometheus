@@ -19,7 +19,7 @@ GOLDFLAGS := -ldflags "-X $(PACKAGE_NAME)/pkg/util.AppGitCommit=${GIT_COMMIT} -X
 
 .PHONY: verify build docker_build push generate generate_verify \
 	go_fcm_server go_test go_fmt e2e_test go_verify   \
-	docker_push
+	docker_push proto
 
 # Alias targets
 ###############
@@ -125,4 +125,5 @@ score:
 	-H 'token: $(GITHUB_TOKEN)'
 
 proto:
-	protoc -I $GOPATH/pkg/mod/github.com/srikrsna/protoc-gen-gotag@v0.5.0/ --proto_path=proto --go_out=proto/ --go-grpc_out=proto/ proto/DeviceDetector.proto
+	#protoc -I $GOPATH/pkg/mod/github.com/srikrsna/protoc-gen-gotag@v0.5.0/ --proto_path=proto --go_out=proto/ --go-grpc_out=proto/ proto/DeviceDetector.proto
+	protoc -I=./proto --go_out=./proto --go-grpc_out=./proto --go-grpc_opt=paths=source_relative ./proto/DeviceDetector.proto
