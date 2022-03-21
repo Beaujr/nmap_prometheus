@@ -431,6 +431,7 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
 
+	houseDevice.Latency = incoming.GetDistance()
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
 		err := s.writeNetworkDevice(houseDevice)
 		if err != nil {
