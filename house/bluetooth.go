@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
-	"github.com/ozonru/etcd/v3/clientv3"
+	etcdv3 "go.etcd.io/etcd/client/v3"
 	"gopkg.in/yaml.v2"
+
 	"io/ioutil"
 	"log"
 	"os"
@@ -46,7 +47,7 @@ func readBleConfig(filename string) ([]*pb.BleDevices, error) {
 func (s *Server) ReadBleConfig() (map[string]*pb.BleDevices, error) {
 	var result map[string]*pb.BleDevices
 	result = make(map[string]*pb.BleDevices)
-	items, err := s.EtcdClient.Get(context.Background(), BlesPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), BlesPrefix, etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ func (s *Server) ReadBleConfig() (map[string]*pb.BleDevices, error) {
 func (s *Server) readBleConfigAsSlice() ([]*pb.BleDevices, error) {
 	var result []*pb.BleDevices
 	result = make([]*pb.BleDevices, 0)
-	items, err := s.EtcdClient.Get(context.Background(), BlesPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), BlesPrefix, etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +145,7 @@ func (s *Server) deleteTcByKey(key string) error {
 func (s *Server) getTc() (map[string]*pb.TimedCommands, error) {
 	var result map[string]*pb.TimedCommands
 	result = make(map[string]*pb.TimedCommands)
-	items, err := s.EtcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), tcPrefix, etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +170,7 @@ func (s *Server) getTc() (map[string]*pb.TimedCommands, error) {
 }
 
 func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
-	items, err := s.EtcdClient.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, id), clientv3.WithPrefix())
+	items, err := s.EtcdClient.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, id), etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +188,7 @@ func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
 func (s *Server) getTcKeys() ([]*string, error) {
 	var result []*string
 	result = make([]*string, 0)
-	items, err := s.EtcdClient.Get(context.Background(), tcPrefix, clientv3.WithPrefix(), clientv3.WithKeysOnly())
+	items, err := s.EtcdClient.Get(context.Background(), tcPrefix, etcdv3.WithPrefix(), etcdv3.WithKeysOnly())
 	if err != nil {
 		return nil, err
 	}

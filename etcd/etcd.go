@@ -1,7 +1,7 @@
 package etcd
 
 import (
-	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
+	etcdv3 "go.etcd.io/etcd/client/v3"
 	"log"
 	"time"
 )

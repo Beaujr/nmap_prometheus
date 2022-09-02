@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
+	etcdv3 "go.etcd.io/etcd/client/v3"
 	"io/ioutil"
 	"log"
 	"net/http"
