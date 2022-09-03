@@ -1,4 +1,4 @@
-    FROM golang:1.17-alpine3.12 as builder
+    FROM golang:1.17-alpine3.16 as builder
     ARG APP_NAME
     RUN apk update && apk add curl make git gcc cmake g++ ca-certificates
     RUN mkdir -p /go/src/github.com/beaujr/${APP_NAME}
