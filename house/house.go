@@ -475,7 +475,6 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
-		etcdv3.WithKeysOnly(),
 	}
 	item, err := s.EtcdClient.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
