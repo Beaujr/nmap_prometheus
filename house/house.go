@@ -8,10 +8,10 @@ import (
 	"github.com/beaujr/nmap_prometheus/etcd"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/ghodss/yaml"
-	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
+	etcdv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/metadata"
 	"io/ioutil"
 	"log"
@@ -27,7 +27,7 @@ var (
 	bleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
 	networkConfigFile  = flag.String("config", "config/devices.yaml", "Path to config file")
 	bleConfigFile      = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
-	etcdServers        = flag.String("etcdServers", "192.168.1.112:2379", "Comma Separated list of etcd servers")
+	etcdServers        = flag.String("etcdServers", "192.168.1.216:2379", "Comma Separated list of etcd servers")
 	debug              = flag.Bool("debug", false, "Debug mode")
 	cqEnabled          = flag.Bool("cq", false, "Command Queue Enabled")
 	newDeviceIsPerson  = flag.Bool("newDeviceIsPerson", false, "Track new devices as people")
@@ -110,7 +110,7 @@ func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
 
 func createCrons(server *Server) {
 	c := cron.New(cron.WithSeconds())
-	c.AddFunc("*/10 * * * * *", func() {
+	c.AddFunc("0 * * * * *", func() {
 		err := server.deviceManager()
 		if err != nil {
 			log.Println(err)
@@ -143,7 +143,7 @@ func createCrons(server *Server) {
 
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
-	etcdClient := etcd.NewClient([]string{*etcdServers})
+	etcdClient := etcd.NewClient(strings.Split(*etcdServers, ","))
 	assistantClient := NewAssistant()
 	notifyClient := NewNotifier(etcdClient)
 
@@ -157,11 +157,6 @@ func NewServer() HomeManager {
 	for _, item := range bleDevices {
 		_ = server.writeBleDevice(item)
 	}
-
-	//devices, _ := readDevicesConfig(*networkConfigFile)
-	//for _, dev := range devices {
-	//	server.writeNetworkDevice(dev)
-	//}
 
 	// Bluetooth
 	_, err = server.ReadBleConfig()
@@ -260,10 +255,23 @@ func init() {
 }
 
 func (s *Server) RegisterMetric(item pb.Devices) {
-	if metrics[item.Name] == nil {
-		metrics[item.Name] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_device",
-			Help: "Device in home",
+	s.AddMetric("", &item)
+	s.AddMetric("lastseen", &item)
+}
+
+func (s *Server) AddMetric(key string, item *pb.Devices) prometheus.Gauge {
+	metricsKey := fmt.Sprintf("%s_%s", item.Name, key)
+	if key == "" {
+		metricsKey = item.Name
+	}
+	if metrics[metricsKey] == nil {
+		metricNamespace := fmt.Sprintf("home_detector_device_%s", key)
+		if key == "" {
+			metricNamespace = "home_detector_device"
+		}
+		metrics[metricsKey] = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: metricNamespace,
+			Help: fmt.Sprintf("Device in home %s", key),
 			ConstLabels: prometheus.Labels{
 				"name":   strings.ReplaceAll(item.Name, " ", "_"),
 				"mac":    item.Id.Mac,
@@ -272,17 +280,8 @@ func (s *Server) RegisterMetric(item pb.Devices) {
 				"person": strconv.FormatBool(item.Person),
 			},
 		})
-		metrics[item.Name+"_lastseen"] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_device_lastseen",
-			Help: "Device in home last seen",
-			ConstLabels: prometheus.Labels{
-				"name": strings.ReplaceAll(item.Name, " ", "_"),
-				"mac":  item.Id.Mac,
-				"ip":   item.Id.Ip,
-				"home": item.Home,
-			},
-		})
 	}
+	return metrics[metricsKey]
 }
 
 func (s *Server) RecordMetrics() {
@@ -305,12 +304,9 @@ func (s *Server) RecordMetrics() {
 				if item.Away {
 					state = 0
 				}
-				if metrics[item.Name] != nil {
-					metrics[item.Name].Set(float64(state))
-				}
-				if metrics[item.Name+"_lastseen"] != nil {
-					metrics[item.Name+"_lastseen"].Set(float64(item.LastSeen))
-				}
+				s.AddMetric("", item).Set(float64(state))
+				s.AddMetric("lastseen", item).Set(float64(item.GetLastSeen()))
+				s.AddMetric("distance", item).Set(float64(item.GetLatency()))
 			}
 			time.Sleep(2 * time.Second)
 		}
@@ -413,12 +409,18 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 	timeAway := s.deviceDetectState(houseDevice.LastSeen)
 	if timeAway > *timeAwaySeconds {
 		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
+		topic := fmt.Sprintf("%s_devices", houseDevice.Home)
+		title := houseDevice.GetId().GetMac()
 		if houseDevice.Person {
-			err := s.NotificationClient.SendNotification(houseDevice.Name, fmt.Sprintf("has returned to %s.", houseDevice.Home), houseDevice.Home)
-			if err != nil {
-				return err
-			}
-
+			topic = houseDevice.GetHome()
+			title = houseDevice.GetName()
+		}
+		if houseDevice.Person {
+			topic = houseDevice.GetHome()
+		}
+		err := s.NotificationClient.SendNotification(title, fmt.Sprintf("has returned to %s.", houseDevice.Home), topic)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -473,6 +475,7 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
+		etcdv3.WithKeysOnly(),
 	}
 	item, err := s.EtcdClient.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
@@ -585,7 +588,7 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 	}
 	if found {
 		lastSeen := s.deviceDetectState(device.LastSeen)
-		device.LastSeen = int64(time.Now().Unix())
+		device.LastSeen = time.Now().Unix()
 		device.Distance = in.Distance
 		err := s.writeBleDevice(device)
 		if err != nil {
@@ -654,11 +657,15 @@ func (s *Server) deviceManager() error {
 		if timeAway > *timeAwaySeconds && !device.Away {
 			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
 			device.Away = true
+			topic := fmt.Sprintf("%s_devices", device.Home)
+			title := device.GetId().GetMac()
 			if device.Person {
-				err := s.NotificationClient.SendNotification(device.Name, "Has left the house", device.Home)
-				if err != nil {
-					return nil
-				}
+				topic = device.GetHome()
+				title = device.GetName()
+			}
+			err := s.NotificationClient.SendNotification(title, "Has left the house", topic)
+			if err != nil {
+				return nil
 			}
 			err = s.writeNetworkDevice(device)
 			if err != nil {

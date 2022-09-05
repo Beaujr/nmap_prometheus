@@ -5,7 +5,7 @@ import (
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/golang/protobuf/ptypes/empty"
-	etcdv3 "github.com/ozonru/etcd/v3/clientv3"
+	etcdv3 "go.etcd.io/etcd/client/v3"
 	"log"
 	"sort"
 	"time"
@@ -82,7 +82,7 @@ func (s *Server) ListTimedCommands(ctx context.Context, _ *empty.Empty) (*pb.TCs
 func (s *Server) ListDevices(ctx context.Context, _ *empty.Empty) (*pb.DevicesResponse, error) {
 	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
-	devices, err := s.getDevices()
+	devices, err := s.getDevices(ctx)
 	if err != nil {
 		log.Printf("Error listing Devices: %v", err)
 		return nil, err

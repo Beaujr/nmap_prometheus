@@ -33,6 +33,45 @@ message BleRequest {
   float distance = 2;
 }
 
+message GoogleAssistantCall {
+    string user = 1;
+    string command = 2;
+    bool converse = 3;
+}
+message FCMCall {
+    string title = 1;
+    string body = 2;
+    string image = 3;
+}
+
+message FcmAction {
+    string notification = 1;
+    repeated string commands    =  2;
+    string title     =   3;
+    string body     =    4;
+    int64 schedule = 5;
+}
+
+message FCMActions {
+     string topic = 1;
+     repeated FcmAction actions = 2;
+}
+
+message FrigateAction {
+    string label = 1;
+    string camera = 2;
+}
+
+message FrigateActions {
+     string topic = 1;
+     repeated FrigateAction actions = 2;
+}
+
+message HomeActions {
+    repeated FrigateActions Frigate = 1;
+    repeated FCMActions Fcm = 2;
+}
+
 message MQTTAddressRequest {
     MQTTAgent agent = 1;
     repeated AddressRequest addresses = 2;

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
-	"github.com/ozonru/etcd/v3/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -81,10 +81,11 @@ func (s *Server) ReadNetworkConfig() (map[string]*pb.Devices, error) {
 	return result, nil
 }
 
-func (s *Server) getDevices() ([]*pb.Devices, error) {
+func (s *Server) getDevices(ctx context.Context) ([]*pb.Devices, error) {
 	var result []*pb.Devices
 	result = make([]*pb.Devices, 0)
-	items, err := s.EtcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
+	//leadCtx := clientv3.WithRequireLeader(ctx)
+	items, err := s.EtcdClient.Get(ctx, devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
