@@ -27,7 +27,7 @@ var (
 	bleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
 	networkConfigFile  = flag.String("config", "config/devices.yaml", "Path to config file")
 	bleConfigFile      = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
-	etcdServers        = flag.String("etcdServers", "192.168.1.216:2379", "Comma Separated list of etcd servers")
+	etcdServers        = flag.String("etcdServers", "192.168.1.232:2379", "Comma Separated list of etcd servers")
 	debug              = flag.Bool("debug", false, "Debug mode")
 	cqEnabled          = flag.Bool("cq", false, "Command Queue Enabled")
 	newDeviceIsPerson  = flag.Bool("newDeviceIsPerson", false, "Track new devices as people")
@@ -36,7 +36,7 @@ var (
 var bleDevices = []*pb.BleDevices{}
 
 var syncStatusWithGA = time.Hour.Seconds()
-var metrics map[string]prometheus.Gauge
+var metrics map[string]*prometheus.GaugeVec
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
 var BlesPrefix = "/bles/"
@@ -110,7 +110,7 @@ func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
 
 func createCrons(server *Server) {
 	c := cron.New(cron.WithSeconds())
-	c.AddFunc("0 * * * * *", func() {
+	c.AddFunc("*/2 * * * * *", func() {
 		err := server.deviceManager()
 		if err != nil {
 			log.Println(err)
@@ -120,7 +120,7 @@ func createCrons(server *Server) {
 			log.Println(err)
 		}
 	})
-	c.AddFunc("* */1 * * * *", func() {
+	c.AddFunc("0 * * * * *", func() {
 		knowDevices, err := server.ReadNetworkConfig()
 		if err != nil {
 			log.Printf(err.Error())
@@ -251,38 +251,115 @@ func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
 	return
 }
 func init() {
-	metrics = make(map[string]prometheus.Gauge)
+	metrics = make(map[string]*prometheus.GaugeVec)
+	hdd := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_device",
+			Help: "Device in home",
+		},
+		[]string{
+			"name", "mac", "ip", "home", "person",
+		},
+	)
+	lastseen := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_device_lastseen",
+			Help: "lastseen device in home",
+		},
+		[]string{
+			"name", "mac", "ip", "home", "person",
+		},
+	)
+	distance := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_device_distance",
+			Help: "distance device in home",
+		},
+		[]string{
+			"name", "mac", "ip", "home", "person",
+		},
+	)
+	grpc := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "grpc_address_count",
+			Help: "Amount of times GRPC Endpoint hit",
+		},
+		[]string{
+			"name",
+		},
+	)
+	grpcEndpoint := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_grpc_endpoint",
+			Help: "agents hitting endpoint",
+		},
+		[]string{
+			"name",
+		},
+	)
+	grpcAgentEndpoint := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_grpc_clients",
+		},
+		[]string{
+			"name", "home", "type",
+		},
+	)
+	cq := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_ble_device",
+		},
+		[]string{
+			"name", "command",
+		},
+	)
+	metrics["lastseen"] = lastseen
+	metrics["hdd"] = hdd
+	metrics["distance"] = distance
+	metrics["grpc"] = grpc
+	metrics["grpcEndpoint"] = grpcEndpoint
+	metrics["grpcAgentEndpoint"] = grpcAgentEndpoint
+	metrics["cq"] = cq
+	for _, v := range metrics {
+		prometheus.MustRegister(v)
+	}
+
 }
 
 func (s *Server) RegisterMetric(item pb.Devices) {
-	s.AddMetric("", &item)
-	s.AddMetric("lastseen", &item)
+	away := 0
+	if item.GetAway() {
+		away = 1
+	}
+	metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(away))
+	metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLastSeen()))
+	metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLatency()))
 }
 
-func (s *Server) AddMetric(key string, item *pb.Devices) prometheus.Gauge {
-	metricsKey := fmt.Sprintf("%s_%s", item.Name, key)
-	if key == "" {
-		metricsKey = item.Name
-	}
-	if metrics[metricsKey] == nil {
-		metricNamespace := fmt.Sprintf("home_detector_device_%s", key)
-		if key == "" {
-			metricNamespace = "home_detector_device"
-		}
-		metrics[metricsKey] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: metricNamespace,
-			Help: fmt.Sprintf("Device in home %s", key),
-			ConstLabels: prometheus.Labels{
-				"name":   strings.ReplaceAll(item.Name, " ", "_"),
-				"mac":    item.Id.Mac,
-				"ip":     item.Id.Ip,
-				"home":   item.Home,
-				"person": strconv.FormatBool(item.Person),
-			},
-		})
-	}
-	return metrics[metricsKey]
-}
+//func (s *Server) AddMetric(key string, item *pb.Devices) prometheus.Gauge {
+//	metricsKey := fmt.Sprintf("%s_%s", item.Name, key)
+//	if key == "" {
+//		metricsKey = item.Name
+//	}
+//	if metrics[metricsKey] == nil {
+//		metricNamespace := fmt.Sprintf("home_detector_device_%s", key)
+//		if key == "" {
+//			metricNamespace = "home_detector_device"
+//		}
+//		metrics[metricsKey] = promauto.NewGauge(prometheus.GaugeOpts{
+//			Name: metricNamespace,
+//			Help: fmt.Sprintf("Device in home %s", key),
+//			ConstLabels: prometheus.Labels{
+//				"name":   strings.ReplaceAll(item.Name, " ", "_"),
+//				"mac":    item.Id.Mac,
+//				"ip":     item.Id.Ip,
+//				"home":   item.Home,
+//				"person": strconv.FormatBool(item.Person),
+//			},
+//		})
+//	}
+//	return metrics[metricsKey]
+//}
 
 func (s *Server) RecordMetrics() {
 	go func() {
@@ -298,15 +375,16 @@ func (s *Server) RecordMetrics() {
 				}
 			}
 			peopleHome.Set(float64(homeCounter))
+			// M37R1C5
 
 			for _, item := range knowDevices {
 				state := 1
 				if item.Away {
 					state = 0
 				}
-				s.AddMetric("", item).Set(float64(state))
-				s.AddMetric("lastseen", item).Set(float64(item.GetLastSeen()))
-				s.AddMetric("distance", item).Set(float64(item.GetLatency()))
+				metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(state))
+				metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLastSeen()))
+				metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLatency()))
 			}
 			time.Sleep(2 * time.Second)
 		}
@@ -502,31 +580,12 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	return &pb.Reply{Acknowledged: true}, nil
 }
 func (s *Server) grpcHitsMetrics(promMetric string, name string, itemCount int) {
-	if metrics[promMetric] == nil {
-		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_grpc_endpoint_items",
-			Help: "Number of calls to server endpoint",
-			ConstLabels: prometheus.Labels{
-				"name": name,
-			},
-		})
-		metrics[promMetric].Set(0)
-	}
-	metrics[promMetric].Add(float64(itemCount))
+	metrics["grpc"].WithLabelValues(name).Add(float64(itemCount))
 }
 
 func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
-	if metrics[promMetric] == nil {
-		metrics[promMetric] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_grpc_endpoint",
-			Help: "Number of calls to server endpoint",
-			ConstLabels: prometheus.Labels{
-				"name": name,
-			},
-		})
-		metrics[promMetric].Set(0)
-	}
-	metrics[promMetric].Add(1)
+
+	metrics["grpcEndpoint"].WithLabelValues(name).Add(1)
 	headers, _ := metadata.FromIncomingContext(ctx)
 	home := "unknown"
 	val := headers.Get("home")
@@ -538,19 +597,7 @@ func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, n
 		if strings.Compare("Ack", name) == 0 {
 			agentType = "ble"
 		}
-		promClientMetric := fmt.Sprintf("%s_client", val[0])
-		if metrics[promClientMetric] == nil {
-			metrics[promClientMetric] = promauto.NewGauge(prometheus.GaugeOpts{
-				Name: "home_detector_grpc_clients",
-				Help: "Number of calls to server endpoint",
-				ConstLabels: prometheus.Labels{
-					"name": val[0],
-					"home": home,
-					"type": agentType,
-				},
-			})
-		}
-		metrics[promClientMetric].Set(float64(time.Now().Unix()))
+		metrics["grpcAgentEndpoint"].WithLabelValues(val[0], home, agentType).Set(float64(time.Now().Unix()))
 	}
 }
 
