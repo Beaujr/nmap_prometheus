@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/house"
 	pb "github.com/beaujr/nmap_prometheus/proto"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -23,7 +24,9 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
+	)
 	server := house.NewServer()
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
@@ -36,5 +39,4 @@ func main() {
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
-
 }

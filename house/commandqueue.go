@@ -3,8 +3,6 @@ package house
 import (
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"log"
 	"sort"
 	"strings"
@@ -30,13 +28,8 @@ func (s *Server) processTimedCommandQueue() error {
 			log.Println(err)
 			return err
 		}
-	}
-
-	if len(tcs) == 0 {
-		for key, val := range metrics {
-			if strings.Contains(key, metricsKey) && val != nil {
-				metrics[key].Set(0)
-			}
+		if err == nil {
+			metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(0)
 		}
 	}
 	return nil
@@ -71,19 +64,7 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 }
 
 func (s *Server) storeTimedCommand(tc *pb.TimedCommands) error {
-	metricId := fmt.Sprintf("%s%s", metricsKey, tc.Id)
-	if metrics[metricId] == nil {
-		metrics[metricId] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_ble_device",
-			Help: "BleDevice in home",
-			ConstLabels: prometheus.Labels{
-				"name":    strings.ReplaceAll(tc.Id, " ", "_"),
-				"command": tc.Command,
-			},
-		})
-	}
-	metrics[metricId].Set(float64(tc.Executeat))
-
+	metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(float64(tc.Executeat))
 	err := s.writeTc(tc)
 	if err != nil {
 		return err
@@ -93,21 +74,10 @@ func (s *Server) storeTimedCommand(tc *pb.TimedCommands) error {
 }
 
 func (s *Server) processTimedCommand(tc *pb.TimedCommands) error {
-	metricId := fmt.Sprintf("%s%s", metricsKey, tc.Id)
-	if metrics[metricId] == nil {
-		metrics[metricId] = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "home_detector_ble_device",
-			Help: "BleDevice in home",
-			ConstLabels: prometheus.Labels{
-				"name":    strings.ReplaceAll(tc.Id, " ", "_"),
-				"command": tc.Command,
-			},
-		})
-	}
 	if tc.Executeat-int64(time.Now().Unix()) > 0 {
-		metrics[metricId].Set(float64(tc.Executeat - int64(time.Now().Unix())))
+		metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(float64(tc.Executeat - int64(time.Now().Unix())))
 	} else if tc.Executeat-int64(time.Now().Unix()) < 0 {
-		metrics[metricId].Set(float64(0))
+		metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(float64(0))
 	}
 	if tc.Executeat < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
 		_, err := s.callAssistant(tc.Command)
