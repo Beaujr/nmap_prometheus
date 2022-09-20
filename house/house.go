@@ -110,7 +110,7 @@ func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
 
 func createCrons(server *Server) {
 	c := cron.New(cron.WithSeconds())
-	c.AddFunc("0 * * * * *", func() {
+	c.AddFunc("*/2 * * * * *", func() {
 		err := server.deviceManager()
 		if err != nil {
 			log.Println(err)
