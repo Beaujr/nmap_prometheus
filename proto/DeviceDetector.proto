@@ -75,6 +75,7 @@ message HomeActions {
 message MQTTAddressRequest {
     MQTTAgent agent = 1;
     repeated AddressRequest addresses = 2;
+    int64 timestamp = 3;
 }
 
 message MQTTBleRequest {

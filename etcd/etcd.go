@@ -16,7 +16,7 @@ var (
 )
 
 // NewClient returns a new etcdv3.Client
-func NewClient(etcdServers []string) etcdv3.KV {
+func NewClient(etcdServers []string) (*etcdv3.Client, etcdv3.KV) {
 	cli, err := etcdv3.New(etcdv3.Config{
 		DialTimeout: dialTimeout,
 		Endpoints:   etcdServers,
@@ -28,5 +28,5 @@ func NewClient(etcdServers []string) etcdv3.KV {
 	}
 
 	kv := etcdv3.NewKV(cli)
-	return kv
+	return cli, kv
 }
