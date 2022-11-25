@@ -2,6 +2,7 @@ package house
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -44,20 +45,20 @@ func writeNetworkDevices(devices map[string]*pb.Devices) error {
 	return writeConfig(d1, *networkConfigFile)
 }
 
-func (s *Server) writeNetworkDevice(item *pb.Devices) error {
+func (s *Server) WriteNetworkDevice(item *pb.Devices) error {
 	d1, err := yaml.Marshal(item)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
 
 	key := fmt.Sprintf("%s%s", devicesPrefix, item.Id.UUID)
-	_, err = s.EtcdClient.Put(context.Background(), key, string(d1))
+	_, err = s.Kv.Put(context.Background(), key, string(d1))
 	return err
 }
 func (s *Server) ReadNetworkConfig() (map[string]*pb.Devices, error) {
 	var result map[string]*pb.Devices
 	result = make(map[string]*pb.Devices)
-	items, err := s.EtcdClient.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
+	items, err := s.Kv.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func (s *Server) getDevices(ctx context.Context) ([]*pb.Devices, error) {
 	var result []*pb.Devices
 	result = make([]*pb.Devices, 0)
 	//leadCtx := clientv3.WithRequireLeader(ctx)
-	items, err := s.EtcdClient.Get(ctx, devicesPrefix, clientv3.WithPrefix())
+	items, err := s.Kv.Get(ctx, devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +107,28 @@ func (s *Server) getDevices(ctx context.Context) ([]*pb.Devices, error) {
 	return result, nil
 }
 
+func (s *Server) GetDevice(id string) (*pb.Devices, error) {
+	items, err := s.Kv.Get(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return nil, nil
+	}
+	if items.Count != 1 {
+		return nil, errors.New("coulnt find distinct item")
+	}
+	val := items.Kvs[0].Value
+	var dev *pb.Devices
+	err = yaml.Unmarshal(val, &dev)
+	if err != nil {
+		return nil, err
+	}
+	return dev, nil
+}
+
 func (s *Server) deleteDeviceById(id string) error {
-	_, err := s.EtcdClient.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
+	_, err := s.Kv.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
 	if err != nil {
 		return err
 	}
@@ -116,20 +137,20 @@ func (s *Server) deleteDeviceById(id string) error {
 
 func (s *Server) processPerson(houseDevice *pb.Devices) error {
 	homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-	houseStatus, err := s.EtcdClient.Get(context.Background(), homeKey)
+	houseStatus, err := s.Kv.Get(context.Background(), homeKey)
 	if err != nil {
 		log.Panic(err.Error())
 	}
 
 	if houseStatus.Count == 0 {
 		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		_, err = s.EtcdClient.Put(context.Background(), homeKey, "false")
+		_, err = s.Kv.Put(context.Background(), homeKey, "false")
 		if err != nil {
 			log.Panic(err.Error())
 		}
 	} else if val, err := strconv.ParseBool(string(houseStatus.Kvs[0].Value)); val && err == nil {
 		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		_, err = s.EtcdClient.Put(context.Background(), homeKey, "false")
+		_, err = s.Kv.Put(context.Background(), homeKey, "false")
 		if err != nil {
 			log.Panic(err.Error())
 		}
@@ -157,7 +178,7 @@ func (s *Server) processPerson(houseDevice *pb.Devices) error {
 func (s *Server) ReadHomesConfig() (map[string]*bool, error) {
 	var result map[string]*bool
 	result = make(map[string]*bool)
-	items, err := s.EtcdClient.Get(context.Background(), homePrefix, clientv3.WithPrefix())
+	items, err := s.Kv.Get(context.Background(), homePrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -172,11 +193,11 @@ func (s *Server) ReadHomesConfig() (map[string]*bool, error) {
 		boolVal, _ := strconv.ParseBool(string(val))
 		if strings.Contains(string(key), "//") {
 			key2 := strings.ReplaceAll(string(key), "//", "")
-			_, err := s.EtcdClient.Put(context.Background(), key2, string(val))
+			_, err := s.Kv.Put(context.Background(), key2, string(val))
 			if err != nil {
 				return nil, err
 			}
-			_, err = s.EtcdClient.Delete(context.Background(), string(key))
+			_, err = s.Kv.Delete(context.Background(), string(key))
 			if err != nil {
 				return nil, err
 			}

@@ -10,6 +10,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/robfig/cron/v3"
 	etcdv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/metadata"
@@ -39,6 +40,7 @@ var syncStatusWithGA = time.Hour.Seconds()
 var metrics map[string]*prometheus.GaugeVec
 var devicesPrefix = "/devices/"
 var homePrefix = "/homes/"
+var AlivePrefix = "/alive/"
 var BlesPrefix = "/bles/"
 var tcPrefix = "/cq/"
 var peoplePrefix = "/people/"
@@ -58,8 +60,7 @@ type HomeManager interface {
 	isDeviceOn(iot *pb.Devices) (bool, error)
 	IsHouseEmpty(home string) bool
 	httpHealthCheck(url string) bool
-	iotStatusManager() error
-	RecordMetrics()
+	loadMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
 	HomeEmptyState(w http.ResponseWriter, req *http.Request)
@@ -68,8 +69,9 @@ type HomeManager interface {
 // Server is an implementation of the proto HomeDetectorServer
 type Server struct {
 	pb.UnimplementedHomeDetectorServer
-	EtcdClient         etcdv3.KV
+	Kv                 etcdv3.KV
 	AssistantClient    GoogleAssistant
+	EtcdClient         *etcdv3.Client
 	NotificationClient Notifier
 }
 
@@ -100,35 +102,27 @@ func (s ByExecutedAt) Less(i, j int) bool {
 func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
 	s := Server{
 		UnimplementedHomeDetectorServer: pb.UnimplementedHomeDetectorServer{},
-		EtcdClient:                      e,
+		Kv:                              e,
 		AssistantClient:                 g,
 		NotificationClient:              n,
 	}
 	createCrons(&s)
+	s.loadMetrics()
 	return s
 }
 
 func createCrons(server *Server) {
 	c := cron.New(cron.WithSeconds())
-	c.AddFunc("*/2 * * * * *", func() {
-		err := server.deviceManager()
-		if err != nil {
-			log.Println(err)
-		}
-		err = server.iotStatusManager()
-		if err != nil {
-			log.Println(err)
-		}
-	})
-	c.AddFunc("0 * * * * *", func() {
-		knowDevices, err := server.ReadNetworkConfig()
-		if err != nil {
-			log.Printf(err.Error())
-		}
-		for _, val := range knowDevices {
-			server.RegisterMetric(*val)
-		}
-	})
+	//c.AddFunc("*/2 * * * * *", func() {
+	//	err := server.deviceManager()
+	//	if err != nil {
+	//		log.Println(err)
+	//	}
+	//	err = server.iotStatusManager()
+	//	if err != nil {
+	//		log.Println(err)
+	//	}
+	//})
 	if *cqEnabled {
 		c.AddFunc("*/10 * * * * *", func() {
 			err := server.processTimedCommandQueue()
@@ -143,11 +137,11 @@ func createCrons(server *Server) {
 
 // NewServer new instance of HomeManager
 func NewServer() HomeManager {
-	etcdClient := etcd.NewClient(strings.Split(*etcdServers, ","))
+	client, etcdClient := etcd.NewClient(strings.Split(*etcdServers, ","))
 	assistantClient := NewAssistant()
 	notifyClient := NewNotifier(etcdClient)
 
-	server := &Server{EtcdClient: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient}
+	server := &Server{Kv: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient, EtcdClient: client}
 	_, err := server.ReadNetworkConfig()
 	if err != nil {
 		log.Println(err)
@@ -159,9 +153,12 @@ func NewServer() HomeManager {
 	}
 
 	// Bluetooth
-	_, err = server.ReadBleConfig()
+	bles, err := server.ReadBleConfig()
 	if err != nil {
 		log.Println(err)
+	}
+	for _, item := range bles {
+		server.RegisterBleMetric(item, "etcd")
 	}
 
 	knowDevices, err := server.ReadNetworkConfig()
@@ -170,20 +167,18 @@ func NewServer() HomeManager {
 	}
 	homes := make([]string, 0)
 	for _, item := range knowDevices {
-		log.Println(fmt.Sprintf("Registering metric for %s", item.Name))
-		server.RegisterMetric(*item)
 		homes = append(homes, item.Home)
 	}
 
 	for _, home := range homes {
 		homeKey := fmt.Sprintf("%s%s", homePrefix, home)
-		_, err := server.EtcdClient.Put(context.Background(), homeKey, strconv.FormatBool(server.IsHouseEmpty(home)))
+		_, err := server.Kv.Put(context.Background(), homeKey, strconv.FormatBool(server.IsHouseEmpty(home)))
 		if err != nil {
 			log.Panic(err.Error())
 		}
 	}
 	createCrons(server)
-	server.RecordMetrics()
+	server.loadMetrics()
 	return server
 }
 
@@ -258,7 +253,7 @@ func init() {
 			Help: "Device in home",
 		},
 		[]string{
-			"name", "mac", "ip", "home", "person",
+			"name", "mac", "home", "person",
 		},
 	)
 	lastseen := prometheus.NewGaugeVec(
@@ -267,7 +262,7 @@ func init() {
 			Help: "lastseen device in home",
 		},
 		[]string{
-			"name", "mac", "ip", "home", "person",
+			"name", "mac", "home", "person",
 		},
 	)
 	distance := prometheus.NewGaugeVec(
@@ -276,7 +271,16 @@ func init() {
 			Help: "distance device in home",
 		},
 		[]string{
-			"name", "mac", "ip", "home", "person",
+			"name", "mac", "home", "person",
+		},
+	)
+	bledistance := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "home_detector_ble_distance",
+			Help: "distance device in home",
+		},
+		[]string{
+			"name", "mac", "home", "agent",
 		},
 	)
 	grpc := prometheus.NewGaugeVec(
@@ -320,75 +324,64 @@ func init() {
 	metrics["grpcEndpoint"] = grpcEndpoint
 	metrics["grpcAgentEndpoint"] = grpcAgentEndpoint
 	metrics["cq"] = cq
+	metrics["bledistance"] = bledistance
 	for _, v := range metrics {
 		prometheus.MustRegister(v)
 	}
 
 }
 
-func (s *Server) RegisterMetric(item pb.Devices) {
+func (s *Server) RegisterMetric(item *pb.Devices) {
 	away := 0
 	if item.GetAway() {
 		away = 1
 	}
-	metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(away))
-	metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLastSeen()))
-	metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLatency()))
+	metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(away))
+	metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLastSeen()))
+	metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLatency()))
 }
 
-//func (s *Server) AddMetric(key string, item *pb.Devices) prometheus.Gauge {
-//	metricsKey := fmt.Sprintf("%s_%s", item.Name, key)
-//	if key == "" {
-//		metricsKey = item.Name
-//	}
-//	if metrics[metricsKey] == nil {
-//		metricNamespace := fmt.Sprintf("home_detector_device_%s", key)
-//		if key == "" {
-//			metricNamespace = "home_detector_device"
-//		}
-//		metrics[metricsKey] = promauto.NewGauge(prometheus.GaugeOpts{
-//			Name: metricNamespace,
-//			Help: fmt.Sprintf("Device in home %s", key),
-//			ConstLabels: prometheus.Labels{
-//				"name":   strings.ReplaceAll(item.Name, " ", "_"),
-//				"mac":    item.Id.Mac,
-//				"ip":     item.Id.Ip,
-//				"home":   item.Home,
-//				"person": strconv.FormatBool(item.Person),
-//			},
-//		})
-//	}
-//	return metrics[metricsKey]
-//}
+func (s *Server) RegisterBleMetric(item *pb.BleDevices, agent string) {
+	metrics["bledistance"].WithLabelValues(item.Name, item.GetId(), item.GetHome(), agent).Set(float64(item.GetDistance()))
+	metrics["lastseen"].WithLabelValues(item.Name, item.GetId(), item.GetHome(), "false").Set(float64(item.GetLastSeen()))
+}
 
-func (s *Server) RecordMetrics() {
-	go func() {
-		for {
-			knowDevices, err := s.ReadNetworkConfig()
-			if err != nil {
-				log.Printf(err.Error())
-			}
-			homeCounter := 0
-			for _, person := range knowDevices {
-				if !person.Away && person.Person {
-					homeCounter++
-				}
-			}
-			peopleHome.Set(float64(homeCounter))
-			// M37R1C5
-
-			for _, item := range knowDevices {
-				state := 1
-				if item.Away {
-					state = 0
-				}
-				metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(state))
-				metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLastSeen()))
-				metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetId().GetIp(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(item.GetLatency()))
-			}
-			time.Sleep(2 * time.Second)
+func (s *Server) loadMetrics() {
+	knowDevices, err := s.ReadNetworkConfig()
+	if err != nil {
+		log.Printf(err.Error())
+	}
+	for _, item := range knowDevices {
+		state := 1
+		if item.Away {
+			state = 0
 		}
-	}()
+		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(state))
+		s.RecordLastSeenMetric(item, item.GetLastSeen())
+		s.RecordDistanceMetric(item, item.GetLatency())
+	}
+	// Bluetooth
+	bles, err := s.ReadBleConfig()
+	if err != nil {
+		log.Println(err)
+	}
+	for _, item := range bles {
+		s.RegisterBleMetric(item, "etcd")
+	}
+}
+
+func (s *Server) RecordLastSeenMetric(item *pb.Devices, timestamp int64) {
+	metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(timestamp))
+	timeAway := s.deviceDetectState(item.LastSeen)
+	if timeAway > *timeAwaySeconds {
+		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(0))
+	} else {
+		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(1))
+	}
+}
+
+func (s *Server) RecordDistanceMetric(item *pb.Devices, distance float32) {
+	metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(distance))
 }
 
 func (s *Server) callAssistant(command string) (*string, error) {
@@ -449,16 +442,15 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 
 	log.Println(fmt.Printf("New Device: %s", name))
 
-	err := s.writeNetworkDevice(&newDevice)
+	err := s.WriteNetworkDevice(&newDevice)
 	if err != nil {
 		log.Printf("Error saving to ETCD: %s", err.Error())
 	}
-
 	err = s.NotificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
 	if err != nil {
 		log.Printf("Error sending notification: %s", err.Error())
 	}
-	s.RegisterMetric(newDevice)
+	s.RegisterMetric(&newDevice)
 	return nil
 }
 
@@ -484,38 +476,59 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 		}
 	}
 
-	timeAway := s.deviceDetectState(houseDevice.LastSeen)
-	if timeAway > *timeAwaySeconds {
-		log.Println(fmt.Sprintf("Device: %s has returned after %d seconds", houseDevice.Name, timeAway))
-		topic := fmt.Sprintf("%s_devices", houseDevice.Home)
-		title := houseDevice.GetId().GetMac()
-		if houseDevice.Person {
-			topic = houseDevice.GetHome()
-			title = houseDevice.GetName()
-		}
-		if houseDevice.Person {
-			topic = houseDevice.GetHome()
-		}
-		err := s.NotificationClient.SendNotification(title, fmt.Sprintf("has returned to %s.", houseDevice.Home), topic)
-		if err != nil {
-			return err
-		}
-	}
-
-	if houseDevice.Person {
+	if houseDevice.GetPerson() {
 		err := s.processPerson(houseDevice)
 		if err != nil {
 			return nil
 		}
 	}
-	houseDevice.Away = false
 	houseDevice.LastSeen = int64(time.Now().Unix())
-
 	houseDevice.Latency = incoming.GetDistance()
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
-		err := s.writeNetworkDevice(houseDevice)
+		err := s.WriteNetworkDevice(houseDevice)
 		if err != nil {
 			log.Printf("Error saving to ETCD: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) GrantLease(mac, home string, ttl int64) error {
+	ctx := context.Background()
+	leaseExists := false
+	leases, err := s.EtcdClient.Lease.Leases(ctx)
+	if err != nil {
+		return err
+	}
+	for _, lease := range leases.Leases {
+		leaseTTL, err := s.EtcdClient.Lease.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
+		if err != nil {
+			return err
+		}
+		for _, key := range leaseTTL.Keys {
+			if strings.Compare(fmt.Sprintf("%s%s", AlivePrefix, mac), string(key)) == 0 {
+				leaseExists = true
+				_, err := s.EtcdClient.Lease.KeepAliveOnce(context.Background(), leaseTTL.ID)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+		if leaseExists {
+			break
+		}
+	}
+	if !leaseExists {
+		lease, err := s.EtcdClient.Lease.Grant(ctx, ttl)
+		if err != nil {
+			return err
+		}
+		key := fmt.Sprintf("%s%s", AlivePrefix, mac)
+		_, err = s.EtcdClient.Put(ctx, key, home, etcdv3.WithLease(lease.ID))
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -554,7 +567,13 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-	item, err := s.EtcdClient.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
+
+	err := s.GrantLease(in.Mac, home, *timeAwaySeconds)
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := s.Kv.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -575,16 +594,17 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 		if err != nil {
 			return nil, err
 		}
+		s.RecordDistanceMetric(exDevice, incoming.GetDistance())
+		s.RecordLastSeenMetric(exDevice, time.Now().Unix())
 	}
 
 	return &pb.Reply{Acknowledged: true}, nil
 }
-func (s *Server) grpcHitsMetrics(promMetric string, name string, itemCount int) {
+func (s *Server) GrpcHitsMetrics(promMetric string, name string, itemCount int) {
 	metrics["grpc"].WithLabelValues(name).Add(float64(itemCount))
 }
 
-func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
-
+func (s *Server) GrpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
 	metrics["grpcEndpoint"].WithLabelValues(name).Add(1)
 	headers, _ := metadata.FromIncomingContext(ctx)
 	home := "unknown"
@@ -606,7 +626,7 @@ func (s *Server) getBLEById(id *string) (*pb.BleDevices, error) {
 		etcdv3.WithLimit(1),
 	}
 	log.Println(fmt.Sprintf("%s%s", BlesPrefix, *id))
-	item, err := s.EtcdClient.Get(context.Background(), fmt.Sprintf("%s%s", BlesPrefix, *id), opts...)
+	item, err := s.Kv.Get(context.Background(), fmt.Sprintf("%s%s", BlesPrefix, *id), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -632,21 +652,34 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 	if !found {
 		return &found, nil
 	}
-	if found {
-		lastSeen := s.deviceDetectState(device.LastSeen)
-		device.LastSeen = time.Now().Unix()
-		device.Distance = in.Distance
-		err := s.writeBleDevice(device)
+
+	device.LastSeen = time.Now().Unix()
+	device.Distance = in.Distance
+	err = s.writeBleDevice(device)
+	if err != nil {
+		log.Printf("Error updating BLE device: %s", device.Id)
+	}
+	headers, _ := metadata.FromIncomingContext(ctx)
+	if val := headers.Get("client"); len(val) > 0 {
+		s.RegisterBleMetric(device, val[0])
+	}
+
+	if len(device.GetCommands()) > 0 {
+		tcs, err := s.getTcByOwner(in.GetKey())
 		if err != nil {
-			log.Printf("Error updating BLE device: %s", device.Id)
+			return nil, err
 		}
-		if lastSeen > *bleTimeAwaySeconds {
-			log.Printf("BLE: %s (%s) detected", device.Name, device.Id)
-			for _, command := range device.Commands {
-				err = s.createTimedCommand(command.Timeout, device.Id, command.Id, command.Command, device.Id)
-				if err != nil {
-					return nil, err
-				}
+		if len(tcs) > 0 {
+			err = s.NotificationClient.SendNotification("Device already detected", fmt.Sprintf("Device Left on %s.", device.GetName()), device.GetHome())
+			if err != nil {
+				return nil, err
+			}
+			return &found, nil
+		}
+		for _, command := range device.Commands {
+			err = s.createTimedCommand(command.Timeout, device.Id, command.Id, command.Command, device.Id)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -680,44 +713,119 @@ func (s *Server) isDeviceOn(iot *pb.Devices) (bool, error) {
 }
 
 func (s *Server) IsHouseEmpty(home string) bool {
-	houseEmpty := true
 	devices, err := s.ReadNetworkConfig()
 	if err != nil {
 		log.Println("Failed to read from etcd")
 	}
 	for _, device := range devices {
 		if !device.Away && device.Person && device.Home == home {
-			houseEmpty = false
+			return false
 		}
 	}
-	return houseEmpty
+	return true
 }
 
 func (s *Server) deviceManager() error {
-	devices, err := s.ReadNetworkConfig()
-	if err != nil {
-		log.Println("Failed to read from etcd")
-	}
-	for _, device := range devices {
-		timeAway := s.deviceDetectState(device.LastSeen)
-		if timeAway > *timeAwaySeconds && !device.Away {
-			log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
-			device.Away = true
-			topic := fmt.Sprintf("%s_devices", device.Home)
-			title := device.GetId().GetMac()
-			if device.Person {
-				topic = device.GetHome()
-				title = device.GetName()
-			}
-			err := s.NotificationClient.SendNotification(title, "Has left the house", topic)
-			if err != nil {
-				return nil
-			}
-			err = s.writeNetworkDevice(device)
-			if err != nil {
-				return nil
+	lastSeenItems := GetMetricValue(metrics["lastseen"])
+	deviceStateItems := GetMetricValue(metrics["hdd"])
+	for _, state := range deviceStateItems {
+		if int(*state.Gauge.Value) == 1 {
+			for _, item := range lastSeenItems {
+				stateId := ""
+				for _, lbl := range state.GetLabel() {
+					if lbl.GetName() == "mac" {
+						stateId = lbl.GetValue()
+					}
+				}
+				if len(stateId) == 0 {
+					continue
+				}
+				timeAway := s.deviceDetectState(int64(*item.Gauge.Value))
+				if timeAway > *timeAwaySeconds {
+					id := ""
+					for _, lbl := range item.GetLabel() {
+						if lbl.GetName() == "mac" {
+							id = lbl.GetValue()
+						}
+					}
+					if len(stateId) == 0 {
+						continue
+					}
+					if stateId == id {
+						device, err := s.GetDevice(id)
+						if err != nil {
+							return err
+						}
+						if device.GetPerson() {
+							continue
+						}
+						log.Println(fmt.Sprintf("Device: %s has left after %d seconds", device.Name, timeAway))
+						device.Away = true
+						topic := fmt.Sprintf("%s_devices", device.Home)
+						title := device.GetId().GetMac()
+						if device.Person {
+							topic = device.GetHome()
+							title = device.GetName()
+						}
+						err = s.NotificationClient.SendNotification(title, "Has left the house", topic)
+						if err != nil {
+							return nil
+						}
+						err = s.WriteNetworkDevice(device)
+						if err != nil {
+							return nil
+						}
+						metrics["hdd"].WithLabelValues(device.Name, device.GetId().GetMac(), device.GetHome(), strconv.FormatBool(device.GetPerson())).Set(0)
+
+					}
+				}
 			}
 		}
+
 	}
 	return nil
+}
+func GetBleDeviceMetricByMac(mac string) *dto.Metric {
+	return findMetricByLabelAndValue("mac", mac, metrics["bledistance"])
+}
+
+func findMetricByLabelAndValue(name, value string, metric *prometheus.GaugeVec) *dto.Metric {
+	cMetrics := []*dto.Metric{}
+	collect(metric, func(m dto.Metric) {
+		for _, lbl := range m.GetLabel() {
+			if lbl.GetValue() == value && lbl.GetName() == name {
+				cMetrics = append(cMetrics, &m)
+			}
+		}
+	})
+	if len(cMetrics) == 0 {
+		return nil
+	}
+	return cMetrics[0]
+}
+
+func GetDeviceMetricByMac(mac string) *dto.Metric {
+	return findMetricByLabelAndValue("mac", mac, metrics["lastseen"])
+}
+
+func GetMetricValue(col prometheus.Collector) []*dto.Metric {
+	cMetrics := []*dto.Metric{}
+	collect(col, func(m dto.Metric) {
+		cMetrics = append(cMetrics, &m)
+	})
+	return cMetrics
+}
+
+// collect calls the function for each metric associated with the Collector
+func collect(col prometheus.Collector, do func(dto.Metric)) {
+	c := make(chan prometheus.Metric)
+	go func(c chan prometheus.Metric) {
+		col.Collect(c)
+		close(c)
+	}(c)
+	for x := range c { // eg range across distinct label vector values
+		m := dto.Metric{}
+		_ = x.Write(&m)
+		do(m)
+	}
 }

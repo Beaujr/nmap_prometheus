@@ -20,6 +20,6 @@ func (s *Server) writePerson(person *people) error {
 	}
 
 	key := fmt.Sprintf("%s%s", peoplePrefix, person.Id)
-	_, err = s.EtcdClient.Put(context.Background(), key, string(d1))
+	_, err = s.Kv.Put(context.Background(), key, string(d1))
 	return err
 }

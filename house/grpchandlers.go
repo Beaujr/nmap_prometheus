@@ -8,13 +8,14 @@ import (
 	etcdv3 "go.etcd.io/etcd/client/v3"
 	"log"
 	"sort"
+	"sync"
 	"time"
 )
 
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
-	s.grpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
+	s.GrpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
+	s.GrpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
 	ack, err := s.processIncomingBleAddress(ctx, in)
 	if err != nil {
 		log.Println(err)
@@ -25,28 +26,42 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 
 // Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
-	s.grpcHitsMetrics("grpc_address_count", "Address", len(in.Addresses))
+	s.GrpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
+	s.GrpcHitsMetrics("grpc_address_count", "Address", len(in.Addresses))
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(in.Addresses))
 	for _, addr := range in.Addresses {
-		_, err := s.ProcessIncomingAddress(ctx, addr)
+		wg.Add(1)
+		go func(ctx *context.Context, address *pb.AddressRequest) {
+			defer wg.Done()
+			_, err := s.ProcessIncomingAddress(*ctx, address)
+			errChan <- err
+		}(&ctx, addr)
+	}
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+	for err := range errChan {
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	return &pb.Reply{Acknowledged: true}, nil
 }
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
-	s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	return s.ProcessIncomingAddress(ctx, in)
 }
 
 // ListCommandQueue Handler for Listing all the TimedCommands
 func (s *Server) ListCommandQueue(ctx context.Context, _ *empty.Empty) (*pb.CQsResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	tcs, err := s.getTc()
 	if err != nil {
 		log.Printf("Error listing CQ: %v", err)
@@ -68,8 +83,8 @@ func (s *Server) ListCommandQueue(ctx context.Context, _ *empty.Empty) (*pb.CQsR
 
 // ListTimedCommands lists all the TimedCommands basically the bles
 func (s *Server) ListTimedCommands(ctx context.Context, _ *empty.Empty) (*pb.TCsResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	bles, err := s.readBleConfigAsSlice()
 	if err != nil {
 		log.Printf("Error listing Bles: %v", err)
@@ -80,8 +95,8 @@ func (s *Server) ListTimedCommands(ctx context.Context, _ *empty.Empty) (*pb.TCs
 
 // ListDevices lists all the Devices
 func (s *Server) ListDevices(ctx context.Context, _ *empty.Empty) (*pb.DevicesResponse, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	devices, err := s.getDevices(ctx)
 	if err != nil {
 		log.Printf("Error listing Devices: %v", err)
@@ -92,9 +107,9 @@ func (s *Server) ListDevices(ctx context.Context, _ *empty.Empty) (*pb.DevicesRe
 
 // DeleteCommandQueue Deletes an entire job from CommandQueue
 func (s *Server) DeleteCommandQueue(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
-	_, err := s.EtcdClient.Delete(ctx, fmt.Sprintf("%s%s", tcPrefix, request.Key))
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
+	_, err := s.Kv.Delete(ctx, fmt.Sprintf("%s%s", tcPrefix, request.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +118,9 @@ func (s *Server) DeleteCommandQueue(ctx context.Context, request *pb.StringReque
 
 // DeleteTimedCommand Deletes an Individual Timed Command from the CommandQueue
 func (s *Server) DeleteTimedCommand(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
-	_, err := s.EtcdClient.Delete(ctx, fmt.Sprintf("%s%s", tcPrefix, request.Key), etcdv3.WithPrefix())
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
+	_, err := s.Kv.Delete(ctx, fmt.Sprintf("%s%s", tcPrefix, request.Key), etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +129,8 @@ func (s *Server) DeleteTimedCommand(ctx context.Context, request *pb.StringReque
 
 // CompleteTimedCommands Handler for finishing TimedCommands Now!
 func (s *Server) CompleteTimedCommands(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	items, err := s.getTc()
 	if err != nil {
 		return nil, err
@@ -139,8 +154,8 @@ func (s *Server) CompleteTimedCommands(ctx context.Context, request *pb.StringRe
 
 // CreateTimedCommand Handler for creating TimedCommands!
 func (s *Server) CreateTimedCommand(ctx context.Context, request *pb.TimedCommands) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	err := s.storeTimedCommand(request)
 	if err != nil {
 		return nil, err
@@ -151,8 +166,8 @@ func (s *Server) CreateTimedCommand(ctx context.Context, request *pb.TimedComman
 
 // CompleteTimedCommand Handler for finishing TimedCommands Now!
 func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	item, err := s.getTcById(request.Key)
 	if err != nil {
 		return nil, err
@@ -168,8 +183,8 @@ func (s *Server) CompleteTimedCommand(ctx context.Context, request *pb.StringReq
 
 // DeleteDevice Handler for deleting Devices
 func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	if request.Key == "" {
 		return &pb.Reply{Acknowledged: true}, nil
 	}
@@ -182,9 +197,9 @@ func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*
 
 // UpdateDevice Handler for updating Devices
 func (s *Server) UpdateDevice(ctx context.Context, request *pb.Devices) (*pb.Reply, error) {
-	//s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.grpcHitsMetrics("grpc_address_count", "Address", 1)
-	err := s.writeNetworkDevice(request)
+	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
+	err := s.WriteNetworkDevice(request)
 	if err != nil {
 		return &pb.Reply{Acknowledged: false}, err
 	}
