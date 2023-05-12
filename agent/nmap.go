@@ -45,7 +45,16 @@ func NewScanner() NetScanner {
 			}
 		}
 	}
-	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses}
+	opts := []func(scanner *nmap.Scanner){
+		nmap.WithTargets(*subnet),
+		nmap.WithPingScan(),
+	}
+	if len(*dnsServers) > 0 {
+		opts = append(opts, nmap.WithCustomDNSServers(strings.Split(*dnsServers, ",")...))
+	} else {
+		opts = append(opts, nmap.WithSystemDNS())
+	}
+	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses, options: opts}
 }
 
 // NetworkScanner is an implementation of the NetScanner
@@ -54,6 +63,7 @@ type NetworkScanner struct {
 	home       string
 	subnet     string
 	localAddrs map[string]string
+	options    []func(scanner *nmap.Scanner)
 }
 
 // Scan executes the nmap binary and parses the result
@@ -63,11 +73,15 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 
 	// Equivalent to `/usr/local/bin/nmap -p 80,443,843 google.com facebook.com youtube.com`,
 	// with a 5 minute timeout.
-	scanner, err := nmap.NewScanner(
-		nmap.WithTargets(ns.subnet),
-		nmap.WithPingScan(),
-		nmap.WithContext(ctx),
-	)
+	opts := append(ns.options, nmap.WithContext(ctx))
+	scanner, err := nmap.NewScanner(opts...)
+	//scanner, err := nmap.NewScanner(
+	//	nmap.WithTargets(ns.subnet),
+	//	nmap.WithPingScan(),
+	//	nmap.WithContext(ctx),
+	//	nmap.WithSystemDNS(),
+	//	//nmap.WithCustomDNSServers(),
+	//)
 	if err != nil {
 		return nil, err
 	}
@@ -85,14 +99,22 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 	for _, host := range result.Hosts {
 		item := pb.AddressRequest{}
 		for _, address := range host.Addresses {
-			if address.AddrType == "ipv4" {
+			switch address.AddrType {
+			case "ipv4":
 				item.Ip = address.Addr
 				if val, ok := ns.localAddrs[address.Addr]; ok {
 					item.Mac = val
 				}
 				continue
+			case "mac":
+				item.Mac = address.Addr
+				item.Vendor = address.Vendor
+			default:
+				item.Mac = address.Addr
 			}
-			item.Mac = address.Addr
+		}
+		for _, hostnames := range host.Hostnames {
+			item.Hosts = append(item.Hosts, hostnames.Name)
 		}
 		rstt, err := strconv.Atoi(host.Times.SRTT)
 		if err != nil {

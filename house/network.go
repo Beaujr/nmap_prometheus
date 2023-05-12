@@ -2,7 +2,6 @@ package house
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -116,7 +115,7 @@ func (s *Server) GetDevice(id string) (*pb.Devices, error) {
 		return nil, nil
 	}
 	if items.Count != 1 {
-		return nil, errors.New("coulnt find distinct item")
+		return nil, fmt.Errorf("coulnt find distinct item for: %s", id)
 	}
 	val := items.Kvs[0].Value
 	var dev *pb.Devices

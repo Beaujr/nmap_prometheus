@@ -27,6 +27,7 @@ var (
 	netInterface = flag.String("interface", "", "Interface to bind to")
 	agentId      = flag.String("agentId", "nmapAgent", "Identify Agent, if left blank will be the Machines ID")
 	apiKey       = flag.String("apikey", "apikey", "API KEY for access")
+	dnsServers   = flag.String("dns-servers", "", "comma separated Custom dns servers eg: 192.168.1.1,192,168.1.9")
 )
 
 // Reporter is the struct to handle GRP Comms
@@ -70,8 +71,8 @@ func NewReporter() Reporter {
 		}
 		return Reporter{BleScanner: bls, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nil}
 	}
-	nmapScanner := NewScanner()
-	return Reporter{BleScanner: nil, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nmapScanner}
+
+	return Reporter{BleScanner: nil, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: NewScanner()}
 
 }
 func (r *Reporter) buildClient() (pb.HomeDetectorClient, context.Context, context.CancelFunc) {

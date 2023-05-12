@@ -71,8 +71,59 @@ type Server struct {
 	pb.UnimplementedHomeDetectorServer
 	Kv                 etcdv3.KV
 	AssistantClient    GoogleAssistant
-	EtcdClient         *etcdv3.Client
+	EtcdClient         Leaser
 	NotificationClient Notifier
+}
+
+type Leaser interface {
+	GrantLease(mac, home string, ttl int64) (string, *etcdv3.LeaseID, error)
+}
+
+type EtcdLeaser struct {
+	etcdv3.Lease
+}
+
+func NewEtcdLeaser(lease etcdv3.Lease) Leaser {
+	return &EtcdLeaser{lease}
+}
+
+func (leaser *EtcdLeaser) GrantLease(mac, home string, ttl int64) (string, *etcdv3.LeaseID, error) {
+	ctx := context.Background()
+	leaseExists := false
+	leases, err := leaser.Leases(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	for _, lease := range leases.Leases {
+		leaseTTL, err := leaser.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
+		if err != nil {
+			return "", nil, err
+		}
+		for _, key := range leaseTTL.Keys {
+			if strings.Compare(fmt.Sprintf("%s%s", AlivePrefix, mac), string(key)) == 0 {
+				leaseExists = true
+				_, err := leaser.KeepAliveOnce(context.Background(), leaseTTL.ID)
+				if err != nil {
+					return "", nil, err
+				}
+
+			}
+		}
+		if leaseExists {
+			break
+		}
+	}
+	if !leaseExists {
+		lease, err := leaser.Grant(ctx, ttl)
+		if err != nil {
+			return "", nil, err
+		}
+		if lease != nil {
+			key := fmt.Sprintf("%s%s", AlivePrefix, mac)
+			return key, &lease.ID, err
+		}
+	}
+	return "", nil, nil
 }
 
 func writeConfig(data []byte, filename string) error {
@@ -140,8 +191,7 @@ func NewServer() HomeManager {
 	client, etcdClient := etcd.NewClient(strings.Split(*etcdServers, ","))
 	assistantClient := NewAssistant()
 	notifyClient := NewNotifier(etcdClient)
-
-	server := &Server{Kv: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient, EtcdClient: client}
+	server := &Server{Kv: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient, EtcdClient: NewEtcdLeaser(client.Lease)}
 	_, err := server.ReadNetworkConfig()
 	if err != nil {
 		log.Println(err)
@@ -438,8 +488,11 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 		Command:      "",
 		Manufacturer: vendor,
 		Home:         home,
+		Hostnames:    in.Hosts,
 	}
-
+	if len(in.Hosts) > 0 {
+		newDevice.Name = in.Hosts[0]
+	}
 	log.Println(fmt.Printf("New Device: %s", name))
 
 	err := s.WriteNetworkDevice(&newDevice)
@@ -491,42 +544,28 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 		}
 	}
 
+	if len(incoming.Hosts) > 0 {
+		hostnamesMaps := map[string]bool{}
+		//load existing
+		for _, host := range houseDevice.Hostnames {
+			hostnamesMaps[host] = true
+		}
+		for _, host := range incoming.Hosts {
+			if _, exist := hostnamesMaps[host]; !exist {
+				houseDevice.Hostnames = append(houseDevice.Hostnames, host)
+			}
+		}
+	}
 	return nil
 }
 
 func (s *Server) GrantLease(mac, home string, ttl int64) error {
-	ctx := context.Background()
-	leaseExists := false
-	leases, err := s.EtcdClient.Lease.Leases(ctx)
+	key, leaseId, err := s.EtcdClient.GrantLease(mac, home, ttl)
 	if err != nil {
 		return err
 	}
-	for _, lease := range leases.Leases {
-		leaseTTL, err := s.EtcdClient.Lease.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
-		if err != nil {
-			return err
-		}
-		for _, key := range leaseTTL.Keys {
-			if strings.Compare(fmt.Sprintf("%s%s", AlivePrefix, mac), string(key)) == 0 {
-				leaseExists = true
-				_, err := s.EtcdClient.Lease.KeepAliveOnce(context.Background(), leaseTTL.ID)
-				if err != nil {
-					return err
-				}
-
-			}
-		}
-		if leaseExists {
-			break
-		}
-	}
-	if !leaseExists {
-		lease, err := s.EtcdClient.Lease.Grant(ctx, ttl)
-		if err != nil {
-			return err
-		}
-		key := fmt.Sprintf("%s%s", AlivePrefix, mac)
-		_, err = s.EtcdClient.Put(ctx, key, home, etcdv3.WithLease(lease.ID))
+	if leaseId != nil && key != "" {
+		_, err = s.Kv.Put(context.Background(), key, home, etcdv3.WithLease(*leaseId))
 		if err != nil {
 			return err
 		}
