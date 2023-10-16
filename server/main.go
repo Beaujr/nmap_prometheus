@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"github.com/beaujr/nmap_prometheus/house"
@@ -12,6 +13,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 )
 
 var port = flag.String("port", "50051", "Port for GRPC Server")
@@ -27,7 +30,9 @@ func main() {
 	s := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 	)
-	server := house.NewServer()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	server := house.NewServer(ctx)
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
 	pb.RegisterHomeDetectorServer(s, server.(pb.HomeDetectorServer))

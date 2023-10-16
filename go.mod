@@ -1,6 +1,6 @@
 module github.com/beaujr/nmap_prometheus
 
-go 1.17
+go 1.21
 
 require (
 	github.com/Ullaakut/nmap v2.0.0+incompatible

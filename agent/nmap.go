@@ -14,6 +14,7 @@ import (
 // NetScanner interface for Scanning and returning AddressRequests
 type NetScanner interface {
 	Scan() ([]*pb.AddressRequest, error)
+	GetInterface() string
 }
 
 // NewScanner returns a new NetScanner client
@@ -23,6 +24,7 @@ func NewScanner() NetScanner {
 	if err != nil {
 		log.Println(err)
 	}
+	nic := "eth0"
 	for _, i := range ifaces {
 		addrs, _ := i.Addrs()
 		if err != nil {
@@ -41,6 +43,8 @@ func NewScanner() NetScanner {
 				if len(hwAddress) > 0 {
 					log.Printf("Local Interface Mac (%s) Ip (%s)", hwAddress, ip.String())
 					localAddresses[ip.String()] = hwAddress
+					nic = i.Name
+
 				}
 			}
 		}
@@ -54,7 +58,7 @@ func NewScanner() NetScanner {
 	} else {
 		opts = append(opts, nmap.WithSystemDNS())
 	}
-	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses, options: opts}
+	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses, options: opts, nic: nic}
 }
 
 // NetworkScanner is an implementation of the NetScanner
@@ -62,6 +66,7 @@ type NetworkScanner struct {
 	NetScanner
 	home       string
 	subnet     string
+	nic        string
 	localAddrs map[string]string
 	options    []func(scanner *nmap.Scanner)
 }
@@ -124,4 +129,8 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 		addresses = append(addresses, &item)
 	}
 	return addresses, nil
+}
+
+func (ns *NetworkScanner) GetInterface() string {
+	return ns.nic
 }

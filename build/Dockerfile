@@ -1,4 +1,4 @@
-FROM golang:1.17-alpine3.16 as builder
+FROM golang:1.20-alpine3.16 as builder
 
 ARG APP_NAME=nmap_prometheus
 RUN apk update && apk add curl make git gcc cmake g++ ca-certificates

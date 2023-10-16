@@ -6,7 +6,9 @@ import (
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	etcdv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"log"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -56,6 +58,41 @@ func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply,
 	s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	return s.ProcessIncomingAddress(ctx, in)
+}
+
+func (s *Server) ListPeople(ctx context.Context, _ *emptypb.Empty) (*pb.PeopleResponse, error) {
+	return s.ListPeopleRequest(ctx)
+}
+
+func (s *Server) TogglePerson(ctx context.Context, device *pb.Devices) (*pb.Reply, error) {
+	initialEmptyState := s.IsHouseEmpty(ctx, device.GetHome())
+	// im only toggling person atm best to assume this is the only field changing for now
+	// this will be the old key path
+	path := "device"
+	if device.GetPerson() {
+		path = "person"
+	}
+
+	_, err := s.UpdateDevice(ctx, device)
+	if err != nil {
+		return nil, err
+	}
+	if !device.Away {
+		log.Printf("Toggling %s to alive value %s\n", device.GetId().GetMac(), path)
+		_, err = s.Kv.Put(ctx, filepath.Join(AlivePrefix, device.GetHome(), device.GetId().GetMac()), path)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	currentEmptyState := s.IsHouseEmpty(ctx, device.GetHome())
+	if currentEmptyState != initialEmptyState {
+		err = s.ToggleHouseStatus(device.GetHome(), currentEmptyState)
+		if err != nil {
+			return &pb.Reply{Acknowledged: true}, err
+		}
+	}
+	return &pb.Reply{Acknowledged: true}, err
 }
 
 // ListCommandQueue Handler for Listing all the TimedCommands
@@ -199,9 +236,15 @@ func (s *Server) DeleteDevice(ctx context.Context, request *pb.StringRequest) (*
 func (s *Server) UpdateDevice(ctx context.Context, request *pb.Devices) (*pb.Reply, error) {
 	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
 	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
-	err := s.WriteNetworkDevice(request)
+	err := s.WriteNetworkDevice(ctx, request)
 	if err != nil {
 		return &pb.Reply{Acknowledged: false}, err
 	}
 	return &pb.Reply{Acknowledged: true}, nil
+}
+
+// UpdateDevice Handler for updating Devices
+func (s *Server) HouseEmpty(ctx context.Context, request *pb.StringRequest) (*pb.Reply, error) {
+	empty := s.IsHouseEmpty(ctx, request.Key)
+	return &pb.Reply{Acknowledged: empty}, nil
 }
