@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/beaujr/nmap_prometheus/agent"
 	"github.com/beaujr/nmap_prometheus/etcd"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	"github.com/ghodss/yaml"
@@ -17,15 +18,17 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
 
-//IOT iotDevices
+// IOT iotDevices
 var (
-	timeAwaySeconds    = flag.Int64("timeout", 300, "")
-	bleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
+	TimeAwaySeconds    = flag.Int64("timeout", 300, "")
+	BleTimeAwaySeconds = flag.Int64("bleTimeout", 15, "")
 	networkConfigFile  = flag.String("config", "config/devices.yaml", "Path to config file")
 	bleConfigFile      = flag.String("bleconfig", "config/ble_devices.yaml", "Path to config file")
 	etcdServers        = flag.String("etcdServers", "192.168.1.232:2379", "Comma Separated list of etcd servers")
@@ -36,15 +39,17 @@ var (
 
 var bleDevices = []*pb.BleDevices{}
 
-var syncStatusWithGA = time.Hour.Seconds()
-var metrics map[string]*prometheus.GaugeVec
-var devicesPrefix = "/devices/"
-var homePrefix = "/homes/"
-var AlivePrefix = "/alive/"
-var BlesPrefix = "/bles/"
-var tcPrefix = "/cq/"
-var peoplePrefix = "/people/"
-var notificationsPrefix = "/notifications/"
+var (
+	syncStatusWithGA    = time.Hour.Seconds()
+	metrics             map[string]*prometheus.GaugeVec
+	devicesPrefix       = "/devices/"
+	HomePrefix          = "/homes/"
+	AlivePrefix         = "/alive/"
+	BlesPrefix          = "/bles/"
+	tcPrefix            = "/cq/"
+	peoplePrefix        = "/people/"
+	notificationsPrefix = "/notifications/"
+)
 
 var (
 	peopleHome = promauto.NewGauge(prometheus.GaugeOpts{
@@ -56,14 +61,15 @@ var (
 // HomeManager manages devices and metric collection
 type HomeManager interface {
 	deviceDetectState(phone int64) int64
-	deviceManager() error
+	deviceManager(ctx context.Context) error
 	isDeviceOn(iot *pb.Devices) (bool, error)
-	IsHouseEmpty(home string) bool
+	IsHouseEmpty(ctx context.Context, home string) bool
 	httpHealthCheck(url string) bool
 	loadMetrics()
 	Devices(w http.ResponseWriter, req *http.Request)
 	People(w http.ResponseWriter, req *http.Request)
 	HomeEmptyState(w http.ResponseWriter, req *http.Request)
+	GetContext() context.Context
 }
 
 // Server is an implementation of the proto HomeDetectorServer
@@ -71,8 +77,102 @@ type Server struct {
 	pb.UnimplementedHomeDetectorServer
 	Kv                 etcdv3.KV
 	AssistantClient    GoogleAssistant
-	EtcdClient         *etcdv3.Client
+	EtcdClient         Leaser
 	NotificationClient Notifier
+	ctx                context.Context
+}
+
+type Leaser interface {
+	GrantLease(ctx context.Context, path, mac string, ttl int64) (string, *etcdv3.LeaseID, error)
+	DeleteLeaseByKey(ctx context.Context, key string) error
+	GetLeaseByKey(ctx context.Context, key string) (*etcdv3.LeaseStatus, *etcdv3.LeaseTimeToLiveResponse, error)
+}
+
+type EtcdLeaser struct {
+	etcdv3.Lease
+}
+
+func (leaser *EtcdLeaser) GetLeaseByKey(ctx context.Context, key string) (*etcdv3.LeaseStatus, *etcdv3.LeaseTimeToLiveResponse, error) {
+	leases, err := leaser.Leases(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, lease := range leases.Leases {
+		leaseTTL, err := leaser.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, leasedItem := range leaseTTL.Keys {
+			if strings.Compare(string(leasedItem), key) == 0 {
+				return &lease, leaseTTL, nil
+			}
+		}
+	}
+	return nil, nil, nil
+}
+
+func (leaser *EtcdLeaser) DeleteLeaseByKey(ctx context.Context, key string) error {
+	leases, err := leaser.Leases(ctx)
+	if err != nil {
+		return err
+	}
+	for _, lease := range leases.Leases {
+		leaseTTL, err := leaser.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
+		if err != nil {
+			return err
+		}
+		for _, leasedItem := range leaseTTL.Keys {
+			if strings.Compare(string(leasedItem), key) == 0 {
+				_, err = leaser.Revoke(ctx, lease.ID)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func NewEtcdLeaser(lease etcdv3.Lease) Leaser {
+	return &EtcdLeaser{lease}
+}
+
+func (leaser *EtcdLeaser) GrantLease(ctx context.Context, path, mac string, ttl int64) (string, *etcdv3.LeaseID, error) {
+	keyPath := filepath.Join(AlivePrefix, path, mac)
+	leaseExists := false
+	leases, err := leaser.Leases(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	for _, lease := range leases.Leases {
+		leaseTTL, err := leaser.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
+		if err != nil {
+			return "", nil, err
+		}
+		for _, key := range leaseTTL.Keys {
+			if strings.Compare(keyPath, string(key)) == 0 {
+				leaseExists = true
+				_, err := leaser.KeepAliveOnce(ctx, leaseTTL.ID)
+				if err != nil {
+					return "", nil, err
+				}
+
+			}
+		}
+		if leaseExists {
+			break
+		}
+	}
+	if !leaseExists {
+		lease, err := leaser.Grant(ctx, ttl)
+		if err != nil {
+			return "", nil, err
+		}
+		if lease != nil {
+			return keyPath, &lease.ID, err
+		}
+	}
+	return "", nil, nil
 }
 
 func writeConfig(data []byte, filename string) error {
@@ -99,12 +199,13 @@ func (s TimeCommands) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s ByExecutedAt) Less(i, j int) bool {
 	return s.TimeCommands[i].Executeat < s.TimeCommands[j].Executeat
 }
-func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier) Server {
+func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier, ctx context.Context) Server {
 	s := Server{
 		UnimplementedHomeDetectorServer: pb.UnimplementedHomeDetectorServer{},
 		Kv:                              e,
 		AssistantClient:                 g,
 		NotificationClient:              n,
+		ctx:                             ctx,
 	}
 	createCrons(&s)
 	s.loadMetrics()
@@ -136,12 +237,12 @@ func createCrons(server *Server) {
 }
 
 // NewServer new instance of HomeManager
-func NewServer() HomeManager {
+func NewServer(ctx context.Context) HomeManager {
 	client, etcdClient := etcd.NewClient(strings.Split(*etcdServers, ","))
 	assistantClient := NewAssistant()
 	notifyClient := NewNotifier(etcdClient)
 
-	server := &Server{Kv: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient, EtcdClient: client}
+	server := &Server{Kv: etcdClient, AssistantClient: assistantClient, NotificationClient: notifyClient, EtcdClient: NewEtcdLeaser(client.Lease), ctx: ctx}
 	_, err := server.ReadNetworkConfig()
 	if err != nil {
 		log.Println(err)
@@ -171,8 +272,8 @@ func NewServer() HomeManager {
 	}
 
 	for _, home := range homes {
-		homeKey := fmt.Sprintf("%s%s", homePrefix, home)
-		_, err := server.Kv.Put(context.Background(), homeKey, strconv.FormatBool(server.IsHouseEmpty(home)))
+		homeKey := fmt.Sprintf("%s%s", HomePrefix, home)
+		_, err := server.Kv.Put(ctx, homeKey, strconv.FormatBool(server.IsHouseEmpty(ctx, home)))
 		if err != nil {
 			log.Panic(err.Error())
 		}
@@ -180,6 +281,10 @@ func NewServer() HomeManager {
 	createCrons(server)
 	server.loadMetrics()
 	return server
+}
+
+func (s *Server) GetContext() context.Context {
+	return s.ctx
 }
 
 // Devices API endpoint to determine devices status
@@ -373,7 +478,7 @@ func (s *Server) loadMetrics() {
 func (s *Server) RecordLastSeenMetric(item *pb.Devices, timestamp int64) {
 	metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(timestamp))
 	timeAway := s.deviceDetectState(item.LastSeen)
-	if timeAway > *timeAwaySeconds {
+	if timeAway > *TimeAwaySeconds {
 		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(0))
 	} else {
 		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(1))
@@ -411,42 +516,54 @@ func (s *Server) newBleDevice(in *pb.StringRequest) error {
 	return nil
 }
 
-func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
+func (s *Server) newDevice(ctx context.Context, in *pb.AddressRequest, home string, md []*pb.Metadata) error {
 	name := in.Ip
-	if in.Mac != "" {
+
+	if in.Mac != "" && len(in.GetHosts()) == 0 {
 		name = in.Mac
 	}
+
+	if len(in.GetHosts()) > 0 {
+		name = in.GetHosts()[0]
+	}
 	vendor := "unknown"
-	if in.Mac != in.Ip && strings.Contains(in.Mac, ":") {
+	name = strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_")
+	if in.GetVendor() != "" {
+		vendor = in.GetVendor()
+		name = vendor
+	} else if in.Mac != in.Ip && strings.Contains(in.Mac, ":") {
 		macVendor, err := GetManufacturer(in.Mac)
 		if macVendor != nil {
 			vendor = *macVendor
+			name = vendor
 		}
 		if err != nil {
 			log.Printf(err.Error())
 			vendor = name
 		}
-
 	}
-
 	newDevice := pb.Devices{
-		Name:         strings.ReplaceAll(strings.ReplaceAll(name, ".", "_"), ":", "_"),
-		Id:           &pb.NetworkId{Ip: in.Ip, Mac: in.Mac, UUID: name},
+		Name:         name,
+		Id:           &pb.NetworkId{Ip: in.Ip, Mac: in.Mac, UUID: in.Mac},
 		Away:         false,
 		LastSeen:     int64(time.Now().Unix()),
 		Person:       *newDeviceIsPerson,
 		Command:      "",
 		Manufacturer: vendor,
 		Home:         home,
+		Hostnames:    in.Hosts,
+		Metadata:     md,
 	}
-
+	if len(in.Hosts) > 0 {
+		newDevice.Name = in.Hosts[0]
+	}
 	log.Println(fmt.Printf("New Device: %s", name))
 
-	err := s.WriteNetworkDevice(&newDevice)
+	err := s.WriteNetworkDevice(ctx, &newDevice)
 	if err != nil {
 		log.Printf("Error saving to ETCD: %s", err.Error())
 	}
-	err = s.NotificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), newDevice.Manufacturer, newDevice.Home)
+	err = s.NotificationClient.SendNotification(fmt.Sprintf("New Device in %s (%s)", newDevice.Home, newDevice.Id.Ip), fmt.Sprintf("%s (%s)", newDevice.Name, newDevice.Manufacturer), newDevice.Home)
 	if err != nil {
 		log.Printf("Error sending notification: %s", err.Error())
 	}
@@ -454,7 +571,10 @@ func (s *Server) newDevice(in *pb.AddressRequest, home string) error {
 	return nil
 }
 
-func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressRequest, home string) error {
+func (s *Server) existingDevice(ctx context.Context, houseDevice *pb.Devices, incoming *pb.AddressRequest, home string) error {
+	if incoming.GetVendor() != "" && incoming.GetVendor() != houseDevice.GetManufacturer() {
+		houseDevice.Manufacturer = incoming.GetVendor()
+	}
 	if incoming.Mac != "" {
 		houseDevice.Id.Mac = incoming.Mac
 	}
@@ -475,58 +595,44 @@ func (s *Server) existingDevice(houseDevice *pb.Devices, incoming *pb.AddressReq
 			return err
 		}
 	}
-
-	if houseDevice.GetPerson() {
-		err := s.processPerson(houseDevice)
-		if err != nil {
-			return nil
-		}
-	}
+	// this is all handled via ttl now and leases
+	//if houseDevice.GetPerson() {
+	//	err := s.processPerson(houseDevice)
+	//	if err != nil {
+	//		return nil
+	//	}
+	//}
 	houseDevice.LastSeen = int64(time.Now().Unix())
 	houseDevice.Latency = incoming.GetDistance()
+	if len(incoming.Hosts) > 0 {
+		hostnamesMaps := map[string]bool{}
+		//load existing
+		for _, host := range houseDevice.Hostnames {
+			hostnamesMaps[host] = true
+		}
+		for _, host := range incoming.Hosts {
+			if _, exist := hostnamesMaps[host]; !exist {
+				houseDevice.Hostnames = append(houseDevice.Hostnames, host)
+			}
+		}
+	}
 	if incoming.Mac != "" && incoming.Mac == houseDevice.Id.Mac {
-		err := s.WriteNetworkDevice(houseDevice)
+		err := s.WriteNetworkDevice(ctx, houseDevice)
 		if err != nil {
 			log.Printf("Error saving to ETCD: %s", err.Error())
 		}
 	}
-
 	return nil
 }
 
-func (s *Server) GrantLease(mac, home string, ttl int64) error {
-	ctx := context.Background()
-	leaseExists := false
-	leases, err := s.EtcdClient.Lease.Leases(ctx)
+func (s *Server) GrantLease(ctx context.Context, data map[string]string, ttl int64) error {
+	key, leaseId, err := s.EtcdClient.GrantLease(ctx, data["home"], data["mac"], ttl)
 	if err != nil {
 		return err
 	}
-	for _, lease := range leases.Leases {
-		leaseTTL, err := s.EtcdClient.Lease.TimeToLive(ctx, lease.ID, etcdv3.WithAttachedKeys())
-		if err != nil {
-			return err
-		}
-		for _, key := range leaseTTL.Keys {
-			if strings.Compare(fmt.Sprintf("%s%s", AlivePrefix, mac), string(key)) == 0 {
-				leaseExists = true
-				_, err := s.EtcdClient.Lease.KeepAliveOnce(context.Background(), leaseTTL.ID)
-				if err != nil {
-					return err
-				}
 
-			}
-		}
-		if leaseExists {
-			break
-		}
-	}
-	if !leaseExists {
-		lease, err := s.EtcdClient.Lease.Grant(ctx, ttl)
-		if err != nil {
-			return err
-		}
-		key := fmt.Sprintf("%s%s", AlivePrefix, mac)
-		_, err = s.EtcdClient.Put(ctx, key, home, etcdv3.WithLease(lease.ID))
+	if leaseId != nil && key != "" {
+		_, err = s.Kv.Put(ctx, key, data["value"], etcdv3.WithLease(*leaseId))
 		if err != nil {
 			return err
 		}
@@ -553,6 +659,36 @@ func (s *Server) searchForOverlappingDevices(in *pb.AddressRequest, home string)
 	return &found, err
 }
 
+func (s *Server) ListPeopleRequest(ctx context.Context) (*pb.PeopleResponse, error) {
+	var people []*pb.People
+	resp, err := s.Kv.Get(ctx, peoplePrefix, etcdv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	for _, person := range resp.Kvs {
+		var human pb.People
+		err := yaml.Unmarshal(person.Value, &human)
+		if err != nil {
+			return nil, err
+		}
+		for _, device := range human.GetIds() {
+			resp, err := s.Kv.Get(ctx, fmt.Sprintf("%s%s", AlivePrefix, device))
+			if err != nil {
+				return nil, err
+			}
+			if len(resp.Kvs) > 0 {
+				for _, deviceId := range resp.Kvs {
+					human.Home = string(deviceId.Value)
+					human.Away = false
+
+				}
+			}
+		}
+		people = append(people, &human)
+	}
+	return &pb.PeopleResponse{People: people}, nil
+}
+
 func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
 	incoming := in
 	headers, _ := metadata.FromIncomingContext(ctx)
@@ -561,24 +697,37 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	if len(val) > 0 {
 		home = val[0]
 	}
+
+	typeOfDevice := agent.NetworkType
+	deviceType := headers.Get("type")
+	if len(deviceType) > 0 {
+		typeOfDevice = deviceType[0]
+	}
+	md := []*pb.Metadata{{Key: "type", Value: typeOfDevice}}
+
 	if incoming.Mac == "" && home != "" {
 		incoming.Mac = fmt.Sprintf("%s/%s", home, strings.ReplaceAll(in.Ip, ".", "_"))
 	}
 	opts := []etcdv3.OpOption{
 		etcdv3.WithLimit(1),
 	}
-
-	err := s.GrantLease(in.Mac, home, *timeAwaySeconds)
-	if err != nil {
-		return nil, err
-	}
+	opts = append(opts, etcdv3.WithLastRev()...)
 
 	item, err := s.Kv.Get(ctx, fmt.Sprintf("%s%s", devicesPrefix, in.Mac), opts...)
 	if err != nil {
 		return nil, err
 	}
+	path := "device"
 	if item.Count == 0 {
-		err := s.newDevice(in, home)
+		if *newDeviceIsPerson {
+			path = "person"
+		}
+		err := s.newDevice(ctx, in, home, md)
+		if err != nil {
+			return nil, err
+		}
+		// grant lease after update for new person
+		err = s.GrantLease(ctx, map[string]string{"mac": in.Mac, "home": home, "value": path}, *TimeAwaySeconds)
 		if err != nil {
 			return nil, err
 		}
@@ -589,15 +738,28 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 		if err != nil {
 			return nil, err
 		}
-
-		err = s.existingDevice(exDevice, incoming, home)
+		if received := ctx.Value("received"); received != nil {
+			iReceived := received.(int64)
+			if exDevice.GetLastSeen() > iReceived {
+				return &pb.Reply{Acknowledged: true}, nil
+			}
+		}
+		exDevice.Metadata = md
+		if exDevice.GetPerson() {
+			path = "person"
+		}
+		// grant lease before update for existing person
+		err = s.GrantLease(ctx, map[string]string{"mac": in.Mac, "home": home, "value": path}, *TimeAwaySeconds)
+		if err != nil {
+			return nil, err
+		}
+		err = s.existingDevice(ctx, exDevice, incoming, home)
 		if err != nil {
 			return nil, err
 		}
 		s.RecordDistanceMetric(exDevice, incoming.GetDistance())
 		s.RecordLastSeenMetric(exDevice, time.Now().Unix())
 	}
-
 	return &pb.Reply{Acknowledged: true}, nil
 }
 func (s *Server) GrpcHitsMetrics(promMetric string, name string, itemCount int) {
@@ -626,7 +788,7 @@ func (s *Server) getBLEById(id *string) (*pb.BleDevices, error) {
 		etcdv3.WithLimit(1),
 	}
 	log.Println(fmt.Sprintf("%s%s", BlesPrefix, *id))
-	item, err := s.Kv.Get(context.Background(), fmt.Sprintf("%s%s", BlesPrefix, *id), opts...)
+	item, err := s.Kv.Get(s.GetContext(), fmt.Sprintf("%s%s", BlesPrefix, *id), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -652,14 +814,28 @@ func (s *Server) processIncomingBleAddress(ctx context.Context, in *pb.BleReques
 	if !found {
 		return &found, nil
 	}
-
+	headers, _ := metadata.FromIncomingContext(ctx)
+	md := []string{}
+	for _, item := range device.GetMetadata() {
+		if !slices.Contains(md, item.GetKey()) {
+			md = append(md, item.GetKey())
+		}
+	}
+	for k, v := range headers {
+		if !slices.Contains(md, k) {
+			md = append(md, k)
+			if len(v) > 0 {
+				device.Metadata = append(device.Metadata, &pb.Metadata{Key: k, Value: strings.Join(v, "|")})
+			}
+		}
+	}
 	device.LastSeen = time.Now().Unix()
 	device.Distance = in.Distance
+
 	err = s.writeBleDevice(device)
 	if err != nil {
 		log.Printf("Error updating BLE device: %s", device.Id)
 	}
-	headers, _ := metadata.FromIncomingContext(ctx)
 	if val := headers.Get("client"); len(val) > 0 {
 		s.RegisterBleMetric(device, val[0])
 	}
@@ -712,20 +888,15 @@ func (s *Server) isDeviceOn(iot *pb.Devices) (bool, error) {
 	return !iot.Away, nil
 }
 
-func (s *Server) IsHouseEmpty(home string) bool {
-	devices, err := s.ReadNetworkConfig()
+func (s *Server) IsHouseEmpty(ctx context.Context, home string) bool {
+	peopleAtHome, err := s.GetPeopleInHouses(ctx, home)
 	if err != nil {
 		log.Println("Failed to read from etcd")
 	}
-	for _, device := range devices {
-		if !device.Away && device.Person && device.Home == home {
-			return false
-		}
-	}
-	return true
+	return len(peopleAtHome) == 0
 }
 
-func (s *Server) deviceManager() error {
+func (s *Server) deviceManager(ctx context.Context) error {
 	lastSeenItems := GetMetricValue(metrics["lastseen"])
 	deviceStateItems := GetMetricValue(metrics["hdd"])
 	for _, state := range deviceStateItems {
@@ -741,7 +912,7 @@ func (s *Server) deviceManager() error {
 					continue
 				}
 				timeAway := s.deviceDetectState(int64(*item.Gauge.Value))
-				if timeAway > *timeAwaySeconds {
+				if timeAway > *TimeAwaySeconds {
 					id := ""
 					for _, lbl := range item.GetLabel() {
 						if lbl.GetName() == "mac" {
@@ -771,7 +942,7 @@ func (s *Server) deviceManager() error {
 						if err != nil {
 							return nil
 						}
-						err = s.WriteNetworkDevice(device)
+						err = s.WriteNetworkDevice(ctx, device)
 						if err != nil {
 							return nil
 						}

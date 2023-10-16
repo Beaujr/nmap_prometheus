@@ -14,6 +14,7 @@ import (
 // NetScanner interface for Scanning and returning AddressRequests
 type NetScanner interface {
 	Scan() ([]*pb.AddressRequest, error)
+	GetInterface() string
 }
 
 // NewScanner returns a new NetScanner client
@@ -23,6 +24,7 @@ func NewScanner() NetScanner {
 	if err != nil {
 		log.Println(err)
 	}
+	nic := "eth0"
 	for _, i := range ifaces {
 		addrs, _ := i.Addrs()
 		if err != nil {
@@ -41,11 +43,22 @@ func NewScanner() NetScanner {
 				if len(hwAddress) > 0 {
 					log.Printf("Local Interface Mac (%s) Ip (%s)", hwAddress, ip.String())
 					localAddresses[ip.String()] = hwAddress
+					nic = i.Name
+
 				}
 			}
 		}
 	}
-	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses}
+	opts := []func(scanner *nmap.Scanner){
+		nmap.WithTargets(*subnet),
+		nmap.WithPingScan(),
+	}
+	if len(*dnsServers) > 0 {
+		opts = append(opts, nmap.WithCustomDNSServers(strings.Split(*dnsServers, ",")...))
+	} else {
+		opts = append(opts, nmap.WithSystemDNS())
+	}
+	return &NetworkScanner{home: *Home, subnet: *subnet, localAddrs: localAddresses, options: opts, nic: nic}
 }
 
 // NetworkScanner is an implementation of the NetScanner
@@ -53,7 +66,9 @@ type NetworkScanner struct {
 	NetScanner
 	home       string
 	subnet     string
+	nic        string
 	localAddrs map[string]string
+	options    []func(scanner *nmap.Scanner)
 }
 
 // Scan executes the nmap binary and parses the result
@@ -63,11 +78,15 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 
 	// Equivalent to `/usr/local/bin/nmap -p 80,443,843 google.com facebook.com youtube.com`,
 	// with a 5 minute timeout.
-	scanner, err := nmap.NewScanner(
-		nmap.WithTargets(ns.subnet),
-		nmap.WithPingScan(),
-		nmap.WithContext(ctx),
-	)
+	opts := append(ns.options, nmap.WithContext(ctx))
+	scanner, err := nmap.NewScanner(opts...)
+	//scanner, err := nmap.NewScanner(
+	//	nmap.WithTargets(ns.subnet),
+	//	nmap.WithPingScan(),
+	//	nmap.WithContext(ctx),
+	//	nmap.WithSystemDNS(),
+	//	//nmap.WithCustomDNSServers(),
+	//)
 	if err != nil {
 		return nil, err
 	}
@@ -85,14 +104,22 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 	for _, host := range result.Hosts {
 		item := pb.AddressRequest{}
 		for _, address := range host.Addresses {
-			if address.AddrType == "ipv4" {
+			switch address.AddrType {
+			case "ipv4":
 				item.Ip = address.Addr
 				if val, ok := ns.localAddrs[address.Addr]; ok {
 					item.Mac = val
 				}
 				continue
+			case "mac":
+				item.Mac = address.Addr
+				item.Vendor = address.Vendor
+			default:
+				item.Mac = address.Addr
 			}
-			item.Mac = address.Addr
+		}
+		for _, hostnames := range host.Hostnames {
+			item.Hosts = append(item.Hosts, hostnames.Name)
 		}
 		rstt, err := strconv.Atoi(host.Times.SRTT)
 		if err != nil {
@@ -102,4 +129,8 @@ func (ns *NetworkScanner) Scan() ([]*pb.AddressRequest, error) {
 		addresses = append(addresses, &item)
 	}
 	return addresses, nil
+}
+
+func (ns *NetworkScanner) GetInterface() string {
+	return ns.nic
 }

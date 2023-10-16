@@ -23,10 +23,17 @@ var (
 	address      = flag.String("server", "192.168.1.190:50051", "NMAP Server")
 	bleEnabled   = flag.Bool("ble", false, "Boolean for BLE scanning")
 	Home         = flag.String("home", "default", "Agent Location eg: Home, Dads house")
-	timeout      = flag.Int("timeout", 10, "When to timeout connecting to server")
+	timeout      = flag.Int("connTimeout", 10, "When to timeout connecting to server")
 	netInterface = flag.String("interface", "", "Interface to bind to")
 	agentId      = flag.String("agentId", "nmapAgent", "Identify Agent, if left blank will be the Machines ID")
 	apiKey       = flag.String("apikey", "apikey", "API KEY for access")
+	dnsServers   = flag.String("dns-servers", "", "comma separated Custom dns servers eg: 192.168.1.1,192,168.1.9")
+)
+
+const (
+	NetworkType   = "network"
+	BluetoothType = "ble"
+	CameraType    = "camera"
 )
 
 // Reporter is the struct to handle GRP Comms
@@ -70,8 +77,8 @@ func NewReporter() Reporter {
 		}
 		return Reporter{BleScanner: bls, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nil}
 	}
-	nmapScanner := NewScanner()
-	return Reporter{BleScanner: nil, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: nmapScanner}
+
+	return Reporter{BleScanner: nil, Home: *Home, conn: conn, id: *agentId, ignoreList: ignoreList, Nmap: NewScanner()}
 
 }
 func (r *Reporter) buildClient() (pb.HomeDetectorClient, context.Context, context.CancelFunc) {
@@ -80,6 +87,7 @@ func (r *Reporter) buildClient() (pb.HomeDetectorClient, context.Context, contex
 	ctx = metadata.AppendToOutgoingContext(ctx, "client", r.id)
 	ctx = metadata.AppendToOutgoingContext(ctx, "home", r.Home)
 	ctx = metadata.AppendToOutgoingContext(ctx, "apikey", *apiKey)
+	ctx = metadata.AppendToOutgoingContext(ctx, "interface", r.Nmap.GetInterface())
 	return client, ctx, cancelFunc
 }
 

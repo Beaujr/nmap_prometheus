@@ -32,6 +32,9 @@ type HomeDetectorClient interface {
 	CompleteTimedCommands(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	CompleteTimedCommand(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 	CreateTimedCommand(ctx context.Context, in *TimedCommands, opts ...grpc.CallOption) (*Reply, error)
+	ListPeople(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PeopleResponse, error)
+	TogglePerson(ctx context.Context, in *Devices, opts ...grpc.CallOption) (*Reply, error)
+	HouseEmpty(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error)
 }
 
 type homeDetectorClient struct {
@@ -159,6 +162,33 @@ func (c *homeDetectorClient) CreateTimedCommand(ctx context.Context, in *TimedCo
 	return out, nil
 }
 
+func (c *homeDetectorClient) ListPeople(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PeopleResponse, error) {
+	out := new(PeopleResponse)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/ListPeople", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *homeDetectorClient) TogglePerson(ctx context.Context, in *Devices, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/TogglePerson", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *homeDetectorClient) HouseEmpty(ctx context.Context, in *StringRequest, opts ...grpc.CallOption) (*Reply, error) {
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, "/proto.HomeDetector/HouseEmpty", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HomeDetectorServer is the server API for HomeDetector service.
 // All implementations must embed UnimplementedHomeDetectorServer
 // for forward compatibility
@@ -177,6 +207,9 @@ type HomeDetectorServer interface {
 	CompleteTimedCommands(context.Context, *StringRequest) (*Reply, error)
 	CompleteTimedCommand(context.Context, *StringRequest) (*Reply, error)
 	CreateTimedCommand(context.Context, *TimedCommands) (*Reply, error)
+	ListPeople(context.Context, *emptypb.Empty) (*PeopleResponse, error)
+	TogglePerson(context.Context, *Devices) (*Reply, error)
+	HouseEmpty(context.Context, *StringRequest) (*Reply, error)
 	mustEmbedUnimplementedHomeDetectorServer()
 }
 
@@ -222,6 +255,15 @@ func (UnimplementedHomeDetectorServer) CompleteTimedCommand(context.Context, *St
 }
 func (UnimplementedHomeDetectorServer) CreateTimedCommand(context.Context, *TimedCommands) (*Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateTimedCommand not implemented")
+}
+func (UnimplementedHomeDetectorServer) ListPeople(context.Context, *emptypb.Empty) (*PeopleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListPeople not implemented")
+}
+func (UnimplementedHomeDetectorServer) TogglePerson(context.Context, *Devices) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TogglePerson not implemented")
+}
+func (UnimplementedHomeDetectorServer) HouseEmpty(context.Context, *StringRequest) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HouseEmpty not implemented")
 }
 func (UnimplementedHomeDetectorServer) mustEmbedUnimplementedHomeDetectorServer() {}
 
@@ -470,6 +512,60 @@ func _HomeDetector_CreateTimedCommand_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HomeDetector_ListPeople_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).ListPeople(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/ListPeople",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).ListPeople(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HomeDetector_TogglePerson_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Devices)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).TogglePerson(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/TogglePerson",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).TogglePerson(ctx, req.(*Devices))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HomeDetector_HouseEmpty_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StringRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HomeDetectorServer).HouseEmpty(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.HomeDetector/HouseEmpty",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HomeDetectorServer).HouseEmpty(ctx, req.(*StringRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.HomeDetector",
 	HandlerType: (*HomeDetectorServer)(nil),
@@ -525,6 +621,18 @@ var _HomeDetector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateTimedCommand",
 			Handler:    _HomeDetector_CreateTimedCommand_Handler,
+		},
+		{
+			MethodName: "ListPeople",
+			Handler:    _HomeDetector_ListPeople_Handler,
+		},
+		{
+			MethodName: "TogglePerson",
+			Handler:    _HomeDetector_TogglePerson_Handler,
+		},
+		{
+			MethodName: "HouseEmpty",
+			Handler:    _HomeDetector_HouseEmpty_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

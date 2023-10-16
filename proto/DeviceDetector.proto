@@ -20,6 +20,9 @@ service HomeDetector {
   rpc CompleteTimedCommands (StringRequest) returns (Reply) {}
   rpc CompleteTimedCommand (StringRequest) returns (Reply) {}
   rpc CreateTimedCommand (TimedCommands) returns (Reply) {}
+  rpc ListPeople (google.protobuf.Empty) returns (PeopleResponse) {}
+  rpc TogglePerson (Devices) returns (Reply) {}
+  rpc HouseEmpty (StringRequest) returns (Reply) {}
 }
 
 // The request message containing the user's name.
@@ -44,48 +47,27 @@ message FCMCall {
     string image = 3;
 }
 
-message FcmAction {
-    string notification = 1;
-    repeated string commands    =  2;
-    string title     =   3;
-    string body     =    4;
-    int64 schedule = 5;
-}
-
-message FCMActions {
-     string topic = 1;
-     repeated FcmAction actions = 2;
-}
-
-message FrigateAction {
-    string label = 1;
-    string camera = 2;
-}
-
-message FrigateActions {
-     string topic = 1;
-     repeated FrigateAction actions = 2;
-}
-
-message HomeActions {
-    repeated FrigateActions Frigate = 1;
-    repeated FCMActions Fcm = 2;
-}
-
 message MQTTAddressRequest {
     MQTTAgent agent = 1;
     repeated AddressRequest addresses = 2;
     int64 timestamp = 3;
+    repeated Metadata metadata = 4;
 }
 
 message MQTTBleRequest {
     MQTTAgent agent = 1;
     BleRequest bles = 2;
+    repeated Metadata metadata = 3;
 }
 
 message MQTTAgent {
     string home = 1;
     string id = 2;
+}
+
+message Metadata {
+   string key = 1;
+   string value = 2;
 }
 
 // The request message containing the user's name.
@@ -118,6 +100,7 @@ message BleDevices {
 	string Home = 5;
 	bool tile = 6;
 	float distance = 7;
+	repeated Metadata metadata = 8;
 }
 
 message Commands {
@@ -131,6 +114,8 @@ message AddressRequest {
   string ip = 1;
   string mac = 2;
   float distance = 3;
+  repeated string hosts = 4;
+  string vendor = 5;
 }
 
 message AddressesRequest {
@@ -142,6 +127,16 @@ message Reply {
   bool acknowledged = 1;
 }
 
+message PeopleResponse {
+    repeated People people = 1;
+}
+
+message People {
+    string Name = 1;
+    repeated string ids = 2;
+    bool away = 3;
+    string home = 4;
+}
 
 message Devices {
 	networkId   Id = 1;
@@ -155,6 +150,8 @@ message Devices {
 	string Manufacturer = 9;
 	bool PresenceAware = 10;
 	float Latency = 11;
+	repeated string Hostnames = 12;
+    repeated Metadata metadata = 13;
 }
 
 message networkId {

@@ -39,7 +39,7 @@ type DebugNotifier struct {
 }
 
 func (fcm *FCMNotifier) getLastSentNotification() (*string, error) {
-	items, err := fcm.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", notificationsPrefix, "last"), etcdv3.WithPrefix())
+	items, err := fcm.etcdClient.Get(context.Background(), fmt.Sprintf("%s%s", notificationsPrefix, "last"))
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package house
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"gopkg.in/yaml.v2"
@@ -25,13 +24,13 @@ func (s *Server) writeHome(id string, item *home) error {
 		log.Fatalf(err.Error())
 	}
 
-	key := fmt.Sprintf("%s%s", homePrefix, id)
-	_, err = s.Kv.Put(context.Background(), key, string(d1))
+	key := fmt.Sprintf("%s%s", HomePrefix, id)
+	_, err = s.Kv.Put(s.GetContext(), key, string(d1))
 	return err
 }
 
 func (s *Server) ToggleHouseStatus(home string, houseEmpty bool) error {
-	_, err := s.Kv.Put(context.Background(), fmt.Sprintf("%s%s", homePrefix, home), strconv.FormatBool(houseEmpty))
+	_, err := s.Kv.Put(s.GetContext(), fmt.Sprintf("%s%s", HomePrefix, home), strconv.FormatBool(houseEmpty))
 	if err != nil {
 		log.Println(err)
 		return err

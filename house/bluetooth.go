@@ -1,7 +1,6 @@
 package house
 
 import (
-	"context"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	etcdv3 "go.etcd.io/etcd/client/v3"
@@ -47,7 +46,7 @@ func readBleConfig(filename string) ([]*pb.BleDevices, error) {
 func (s *Server) ReadBleConfig() (map[string]*pb.BleDevices, error) {
 	var result map[string]*pb.BleDevices
 	result = make(map[string]*pb.BleDevices)
-	items, err := s.Kv.Get(context.Background(), BlesPrefix, etcdv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), BlesPrefix, etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +73,7 @@ func (s *Server) ReadBleConfig() (map[string]*pb.BleDevices, error) {
 func (s *Server) readBleConfigAsSlice() ([]*pb.BleDevices, error) {
 	var result []*pb.BleDevices
 	result = make([]*pb.BleDevices, 0)
-	items, err := s.Kv.Get(context.Background(), BlesPrefix, etcdv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), BlesPrefix, etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +116,7 @@ func (s *Server) writeBleDevice(item *pb.BleDevices) error {
 	}
 
 	key := fmt.Sprintf("%s%s", BlesPrefix, item.Id)
-	_, err = s.Kv.Put(context.Background(), key, string(d1))
+	_, err = s.Kv.Put(s.GetContext(), key, string(d1))
 	return err
 }
 
@@ -128,7 +127,7 @@ func (s *Server) writeTc(item *pb.TimedCommands) error {
 	}
 
 	key := fmt.Sprintf("%s%s", tcPrefix, item.Id)
-	_, err = s.Kv.Put(context.Background(), key, string(d1))
+	_, err = s.Kv.Put(s.GetContext(), key, string(d1))
 	return err
 }
 
@@ -138,14 +137,14 @@ func (s *Server) deleteTc(item *pb.TimedCommands) error {
 }
 
 func (s *Server) deleteTcByKey(key string) error {
-	_, err := s.Kv.Delete(context.Background(), key)
+	_, err := s.Kv.Delete(s.GetContext(), key)
 	return err
 }
 
 func (s *Server) getTcByOwner(owner string) (map[string]*pb.TimedCommands, error) {
 	var result map[string]*pb.TimedCommands
 	result = make(map[string]*pb.TimedCommands)
-	items, err := s.Kv.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, owner), etcdv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), fmt.Sprintf("%s%s", tcPrefix, owner), etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +173,7 @@ func (s *Server) getTc() (map[string]*pb.TimedCommands, error) {
 }
 
 func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
-	items, err := s.Kv.Get(context.Background(), fmt.Sprintf("%s%s", tcPrefix, id), etcdv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), fmt.Sprintf("%s%s", tcPrefix, id), etcdv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +191,7 @@ func (s *Server) getTcById(id string) (*pb.TimedCommands, error) {
 func (s *Server) getTcKeys() ([]*string, error) {
 	var result []*string
 	result = make([]*string, 0)
-	items, err := s.Kv.Get(context.Background(), tcPrefix, etcdv3.WithPrefix(), etcdv3.WithKeysOnly())
+	items, err := s.Kv.Get(s.GetContext(), tcPrefix, etcdv3.WithPrefix(), etcdv3.WithKeysOnly())
 	if err != nil {
 		return nil, err
 	}

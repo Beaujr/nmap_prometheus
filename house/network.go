@@ -2,7 +2,6 @@ package house
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -45,20 +44,20 @@ func writeNetworkDevices(devices map[string]*pb.Devices) error {
 	return writeConfig(d1, *networkConfigFile)
 }
 
-func (s *Server) WriteNetworkDevice(item *pb.Devices) error {
+func (s *Server) WriteNetworkDevice(ctx context.Context, item *pb.Devices) error {
 	d1, err := yaml.Marshal(item)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
 
 	key := fmt.Sprintf("%s%s", devicesPrefix, item.Id.UUID)
-	_, err = s.Kv.Put(context.Background(), key, string(d1))
+	_, err = s.Kv.Put(ctx, key, string(d1))
 	return err
 }
 func (s *Server) ReadNetworkConfig() (map[string]*pb.Devices, error) {
 	var result map[string]*pb.Devices
 	result = make(map[string]*pb.Devices)
-	items, err := s.Kv.Get(context.Background(), devicesPrefix, clientv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), devicesPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +107,7 @@ func (s *Server) getDevices(ctx context.Context) ([]*pb.Devices, error) {
 }
 
 func (s *Server) GetDevice(id string) (*pb.Devices, error) {
-	items, err := s.Kv.Get(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), fmt.Sprintf("%s%s", devicesPrefix, id))
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +115,7 @@ func (s *Server) GetDevice(id string) (*pb.Devices, error) {
 		return nil, nil
 	}
 	if items.Count != 1 {
-		return nil, errors.New("coulnt find distinct item")
+		return nil, fmt.Errorf("coulnt find distinct item for: %s", id)
 	}
 	val := items.Kvs[0].Value
 	var dev *pb.Devices
@@ -128,7 +127,7 @@ func (s *Server) GetDevice(id string) (*pb.Devices, error) {
 }
 
 func (s *Server) deleteDeviceById(id string) error {
-	_, err := s.Kv.Delete(context.Background(), fmt.Sprintf("%s%s", devicesPrefix, id), clientv3.WithPrefix())
+	_, err := s.Kv.Delete(s.GetContext(), fmt.Sprintf("%s%s", devicesPrefix, id))
 	if err != nil {
 		return err
 	}
@@ -136,21 +135,21 @@ func (s *Server) deleteDeviceById(id string) error {
 }
 
 func (s *Server) processPerson(houseDevice *pb.Devices) error {
-	homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-	houseStatus, err := s.Kv.Get(context.Background(), homeKey)
+	homeKey := fmt.Sprintf("%s%s", HomePrefix, houseDevice.Home)
+	houseStatus, err := s.Kv.Get(s.GetContext(), homeKey)
 	if err != nil {
 		log.Panic(err.Error())
 	}
 
 	if houseStatus.Count == 0 {
-		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		_, err = s.Kv.Put(context.Background(), homeKey, "false")
+		homeKey := fmt.Sprintf("%s%s", HomePrefix, houseDevice.Home)
+		_, err = s.Kv.Put(s.GetContext(), homeKey, "false")
 		if err != nil {
 			log.Panic(err.Error())
 		}
 	} else if val, err := strconv.ParseBool(string(houseStatus.Kvs[0].Value)); val && err == nil {
-		homeKey := fmt.Sprintf("%s%s", homePrefix, houseDevice.Home)
-		_, err = s.Kv.Put(context.Background(), homeKey, "false")
+		homeKey := fmt.Sprintf("%s%s", HomePrefix, houseDevice.Home)
+		_, err = s.Kv.Put(s.GetContext(), homeKey, "false")
 		if err != nil {
 			log.Panic(err.Error())
 		}
@@ -178,7 +177,7 @@ func (s *Server) processPerson(houseDevice *pb.Devices) error {
 func (s *Server) ReadHomesConfig() (map[string]*bool, error) {
 	var result map[string]*bool
 	result = make(map[string]*bool)
-	items, err := s.Kv.Get(context.Background(), homePrefix, clientv3.WithPrefix())
+	items, err := s.Kv.Get(s.GetContext(), HomePrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -189,15 +188,15 @@ func (s *Server) ReadHomesConfig() (map[string]*bool, error) {
 	for i < int(items.Count) {
 		val := items.Kvs[i].Value
 		key := items.Kvs[i].Key
-		newKey := strings.ReplaceAll(string(key), homePrefix, "")
+		newKey := strings.ReplaceAll(string(key), HomePrefix, "")
 		boolVal, _ := strconv.ParseBool(string(val))
 		if strings.Contains(string(key), "//") {
 			key2 := strings.ReplaceAll(string(key), "//", "")
-			_, err := s.Kv.Put(context.Background(), key2, string(val))
+			_, err := s.Kv.Put(s.GetContext(), key2, string(val))
 			if err != nil {
 				return nil, err
 			}
-			_, err = s.Kv.Delete(context.Background(), string(key))
+			_, err = s.Kv.Delete(s.GetContext(), string(key))
 			if err != nil {
 				return nil, err
 			}

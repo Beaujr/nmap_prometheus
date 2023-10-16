@@ -12,7 +12,7 @@ type Client struct {
 }
 
 var (
-	dialTimeout = 2 * time.Second
+	dialTimeout = 30 * time.Second
 )
 
 // NewClient returns a new etcdv3.Client
