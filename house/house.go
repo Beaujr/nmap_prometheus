@@ -261,7 +261,9 @@ func (s TimeCommands) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s ByExecutedAt) Less(i, j int) bool {
 	return s.TimeCommands[i].Executeat < s.TimeCommands[j].Executeat
 }
-func NewCustomServer(e etcdv3.KV, g GoogleAssistant, n Notifier, ctx context.Context, handler slog.Handler) Server {
+
+// NewCustomServer function to allow passing in Server dependencies
+func NewCustomServer(ctx context.Context, e etcdv3.KV, g GoogleAssistant, n Notifier, handler slog.Handler) Server {
 	s := Server{
 		UnimplementedHomeDetectorServer: pb.UnimplementedHomeDetectorServer{},
 		Kv:                              e,
@@ -413,11 +415,11 @@ func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-type NetworkDevice struct {
+type networkDevice struct {
 	*pb.Devices
 }
 
-func (d *NetworkDevice) Observe(ctx context.Context, obs api.Observer) error {
+func (d *networkDevice) observe(_ context.Context, obs api.Observer) error {
 	away := float64(1)
 	if (time.Now().Unix() - d.GetLastSeen()) > *TimeAwaySeconds {
 		away = float64(0)
@@ -434,12 +436,12 @@ func (d *NetworkDevice) Observe(ctx context.Context, obs api.Observer) error {
 	return nil
 }
 
-type BluetoothDevice struct {
+type bluetoothDevice struct {
 	*pb.BleDevices
 	agent string
 }
 
-func (d *BluetoothDevice) Observe(ctx context.Context, obs api.Observer) error {
+func (d *bluetoothDevice) observe(ctx context.Context, obs api.Observer) error {
 	attrs := []attribute.KeyValue{
 		attribute.Key("name").String(d.GetName()),
 		attribute.Key("mac").String(d.GetId()),
@@ -450,16 +452,16 @@ func (d *BluetoothDevice) Observe(ctx context.Context, obs api.Observer) error {
 	return nil
 }
 func (s *Server) RegisterMetric(item *pb.Devices) {
-	d := &NetworkDevice{item}
-	_, err := meter.RegisterCallback(d.Observe, lastseen, distance, devices)
+	d := &networkDevice{item}
+	_, err := meter.RegisterCallback(d.observe, lastseen, distance, devices)
 	if err != nil {
 		log.Panicln(err.Error())
 	}
 }
 
 func (s *Server) RegisterBleMetric(item *pb.BleDevices, agent string) {
-	b := &BluetoothDevice{item, agent}
-	_, err := meter.RegisterCallback(b.Observe, bledistance, lastseen)
+	b := &bluetoothDevice{item, agent}
+	_, err := meter.RegisterCallback(b.observe, bledistance, lastseen)
 	if err != nil {
 		log.Panicln(err.Error())
 	}
@@ -768,24 +770,23 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	}
 	return &pb.Reply{Acknowledged: true}, nil
 }
-func (s *Server) GrpcHitsMetrics(ctx context.Context, name string, itemCount int) {
+func (s *Server) grpcHitsMetrics(ctx context.Context, name string, itemCount int) {
 	attrs := []attribute.KeyValue{
 		attribute.Key("name").String(name),
 	}
 	grpc.Add(ctx, int64(itemCount), api.WithAttributes(attrs...))
-	headers, _ := metadata.FromIncomingContext(ctx)
-	md := Metadata{headers}
-	_, err := meter.RegisterCallback(md.observeGrpc, grpcAgentEndpoint)
+	md, _ := metadata.FromIncomingContext(ctx)
+	_, err := meter.RegisterCallback(headers{md}.observeGrpc, grpcAgentEndpoint)
 	if err != nil {
 		log.Panicln(err.Error())
 	}
 }
 
-type Metadata struct {
+type headers struct {
 	metadata.MD
 }
 
-func (md *Metadata) observeGrpc(_ context.Context, obs api.Observer) error {
+func (md *headers) observeGrpc(_ context.Context, obs api.Observer) error {
 	attrs := []attribute.KeyValue{}
 	val := md.Get("home")
 	if len(val) > 0 {
@@ -802,7 +803,7 @@ func (md *Metadata) observeGrpc(_ context.Context, obs api.Observer) error {
 	return nil
 }
 
-func (s *Server) GrpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
+func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
 	grpcEndpoint.Add(ctx, 1, api.WithAttributes([]attribute.KeyValue{
 		attribute.Key("name").String(name)}...))
 }
