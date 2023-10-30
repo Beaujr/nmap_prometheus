@@ -14,11 +14,11 @@ import (
 
 var metricsKey = "cq_"
 
-type tc struct {
+type TC struct {
 	*pb.TimedCommands
 }
 
-func (tc tc) observe(ctx context.Context, obs api.Observer) error {
+func (tc *TC) Observe(ctx context.Context, obs api.Observer) error {
 	attrs := []attribute.KeyValue{
 		attribute.Key("name").String(strings.ReplaceAll(tc.Id, " ", "_")),
 		attribute.Key("command").String(tc.Command),
@@ -83,12 +83,13 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 	return s.storeTimedCommand(tc)
 }
 
-func (s *Server) storeTimedCommand(timedCommand *pb.TimedCommands) error {
-	_, err := meter.RegisterCallback(tc{timedCommand}.observe, cq)
+func (s *Server) storeTimedCommand(tc *pb.TimedCommands) error {
+	mtc := TC{tc}
+	_, err := meter.RegisterCallback(mtc.Observe, cq)
 	if err != nil {
 		log.Panicln(err.Error())
 	}
-	err = s.writeTc(timedCommand)
+	err = s.writeTc(tc)
 	if err != nil {
 		return err
 	}
