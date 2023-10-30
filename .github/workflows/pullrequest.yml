@@ -24,29 +24,11 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: 1.21.x
-    - name: Build Binaries
-      run: |
-        make build GOARCH=amd64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_amd64
-        make build GOARCH=arm64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm64
-        make build GOARCH=arm GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm
-        make build GOARCH=amd64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_amd64
-        make build GOARCH=arm64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm64
-        make build GOARCH=arm APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm
-  build-docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v1
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-      - uses: docker/setup-buildx-action@v1
-        id: buildx
-        with:
-          install: true
-      - name: Available platforms
-        run: echo ${{ steps.buildx.outputs.platforms }}
-      - name: Docker Login
-        run: make docker-login DOCKER_USER=beaujr DOCKER_PASS=${{ secrets.DOCKER_PASS }}
-      - name: Build the Client Docker image
-        run: make docker_build APP_TYPE=client DOCKERFILE=Dockerfile.client BUILD_TAG=client-unstable PUSH=false
-      - name: Build the Server Docker image
-        run: make docker_build APP_TYPE=server BUILD_TAG=server-unstable PUSH=false
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v5
+      with:
+        distribution: goreleaser
+        version: latest
+        args: --snapshot
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

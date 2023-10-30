@@ -1,0 +1,31 @@
+before:
+  hooks:
+    - go mod tidy
+    - go mod vendor
+builds:
+  - env:
+      - CGO_ENABLED=0
+    binary: app
+    goos:
+      - linux
+    main: server/main.go
+    id: server
+    goarch:
+      - amd64
+      - arm64
+      - arm
+  - env:
+      - CGO_ENABLED=0
+    binary: app
+    goos:
+      - linux
+    main: client/main.go
+    id: client
+    goarch:
+      - amd64
+      - arm64
+      - arm
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Runtime.Goos}}{{ .Runtime.Goarch }}"
