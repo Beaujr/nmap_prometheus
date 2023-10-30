@@ -16,11 +16,11 @@ import (
 
 // Ack for bluetooth reported MAC addresses
 func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) {
-	s.GrpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
-	s.GrpcHitsMetrics("grpc_address_count_ble", "Ack", 1)
+	s.grpcPrometheusMetrics(ctx, "grpc_ble", "Ack")
+	s.grpcHitsMetrics(ctx, "Ack", 1)
 	ack, err := s.processIncomingBleAddress(ctx, in)
 	if err != nil {
-		log.Println(err)
+		s.Logger.Error(err.Error())
 		return &pb.Reply{Acknowledged: true}, nil
 	}
 	return &pb.Reply{Acknowledged: *ack}, nil
@@ -28,8 +28,8 @@ func (s *Server) Ack(ctx context.Context, in *pb.BleRequest) (*pb.Reply, error) 
 
 // Addresses Handler for receiving array of IP/MAC requests
 func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Reply, error) {
-	s.GrpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
-	s.GrpcHitsMetrics("grpc_address_count", "Address", len(in.Addresses))
+	s.grpcPrometheusMetrics(ctx, "grpc_addresses", "Addresses")
+	s.grpcHitsMetrics(ctx, "Address", len(in.Addresses))
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(in.Addresses))
 	for _, addr := range in.Addresses {
@@ -55,8 +55,8 @@ func (s *Server) Addresses(ctx context.Context, in *pb.AddressesRequest) (*pb.Re
 
 // Address Handler for receiving IP/MAC requests
 func (s *Server) Address(ctx context.Context, in *pb.AddressRequest) (*pb.Reply, error) {
-	s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
+	s.grpcPrometheusMetrics(ctx, "grpc_address", "Address")
+	s.grpcHitsMetrics(ctx, "Address", 1)
 	return s.ProcessIncomingAddress(ctx, in)
 }
 
@@ -97,8 +97,6 @@ func (s *Server) TogglePerson(ctx context.Context, device *pb.Devices) (*pb.Repl
 
 // ListCommandQueue Handler for Listing all the TimedCommands
 func (s *Server) ListCommandQueue(ctx context.Context, _ *empty.Empty) (*pb.CQsResponse, error) {
-	//s.GrpcPrometheusMetrics(ctx, "grpc_address", "Address")
-	//s.GrpcHitsMetrics("grpc_address_count", "Address", 1)
 	tcs, err := s.getTc()
 	if err != nil {
 		log.Printf("Error listing CQ: %v", err)

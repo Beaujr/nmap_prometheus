@@ -1,8 +1,11 @@
 package house
 
 import (
+	"context"
 	"fmt"
 	pb "github.com/beaujr/nmap_prometheus/proto"
+	"go.opentelemetry.io/otel/attribute"
+	api "go.opentelemetry.io/otel/metric"
 	"log"
 	"sort"
 	"strings"
@@ -11,10 +14,27 @@ import (
 
 var metricsKey = "cq_"
 
+type tc struct {
+	*pb.TimedCommands
+}
+
+func (tc tc) observe(ctx context.Context, obs api.Observer) error {
+	attrs := []attribute.KeyValue{
+		attribute.Key("name").String(strings.ReplaceAll(tc.Id, " ", "_")),
+		attribute.Key("command").String(tc.Command),
+	}
+	val := float64(0)
+	if tc.Executeat-int64(time.Now().Unix()) > 0 {
+		val = float64(tc.Executeat - int64(time.Now().Unix()))
+	}
+	obs.ObserveFloat64(cq, val, api.WithAttributes(attrs...))
+	return nil
+}
+
 func (s *Server) processTimedCommandQueue() error {
 	tcs, err := s.getTc()
 	if err != nil {
-		log.Println(err)
+		s.Logger.Error(err.Error())
 		return err
 	}
 	sortedTcs := make([]*pb.TimedCommands, 0)
@@ -25,11 +45,11 @@ func (s *Server) processTimedCommandQueue() error {
 	for _, tc := range tcs {
 		err = s.processTimedCommand(tc)
 		if err != nil {
-			log.Println(err)
+			s.Logger.Error(err.Error())
 			return err
 		}
 		if err == nil {
-			metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(0)
+			//metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(0)
 		}
 	}
 	return nil
@@ -63,9 +83,12 @@ func (s *Server) createTimedCommand(timeout int64, id string, commandId string, 
 	return s.storeTimedCommand(tc)
 }
 
-func (s *Server) storeTimedCommand(tc *pb.TimedCommands) error {
-	metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(float64(tc.Executeat))
-	err := s.writeTc(tc)
+func (s *Server) storeTimedCommand(timedCommand *pb.TimedCommands) error {
+	_, err := meter.RegisterCallback(tc{timedCommand}.observe, cq)
+	if err != nil {
+		log.Panicln(err.Error())
+	}
+	err = s.writeTc(timedCommand)
 	if err != nil {
 		return err
 	}
@@ -74,28 +97,23 @@ func (s *Server) storeTimedCommand(tc *pb.TimedCommands) error {
 }
 
 func (s *Server) processTimedCommand(tc *pb.TimedCommands) error {
-	if tc.Executeat-int64(time.Now().Unix()) > 0 {
-		metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(float64(tc.Executeat - int64(time.Now().Unix())))
-	} else if tc.Executeat-int64(time.Now().Unix()) < 0 {
-		metrics["cq"].WithLabelValues(strings.ReplaceAll(tc.Id, " ", "_"), tc.GetCommand()).Set(float64(0))
-	}
 	if tc.Executeat < int64(time.Now().Unix()) && !tc.Executed && *cqEnabled {
 		_, err := s.callAssistant(tc.Command)
 		if err != nil {
-			log.Println(err)
+			s.Logger.Error(err.Error())
 			return err
 		}
 		err = s.deleteTc(tc)
 		if err != nil {
-			log.Println(err)
+			s.Logger.Error(err.Error())
 		}
 		//err = s.writeTc(tc)
 		//if err != nil {
-		//	log.Println(err)
+		//	s.Logger.Error(err)
 		//}
 		err = s.NotificationClient.SendNotification("Scheduled Task", tc.Command, "devices")
 		if err != nil {
-			log.Println(err)
+			s.Logger.Error(err.Error())
 		}
 
 	}

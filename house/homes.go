@@ -32,7 +32,7 @@ func (s *Server) writeHome(id string, item *home) error {
 func (s *Server) ToggleHouseStatus(home string, houseEmpty bool) error {
 	_, err := s.Kv.Put(s.GetContext(), fmt.Sprintf("%s%s", HomePrefix, home), strconv.FormatBool(houseEmpty))
 	if err != nil {
-		log.Println(err)
+		s.Logger.Error(err.Error())
 		return err
 	}
 	body := "No longer Empty"
@@ -40,7 +40,7 @@ func (s *Server) ToggleHouseStatus(home string, houseEmpty bool) error {
 		body = fmt.Sprintf("No Humans in %s", home)
 		devices, err := s.ReadNetworkConfig()
 		if err != nil {
-			log.Println(err)
+			s.Logger.Error(err.Error())
 			return err
 		}
 		i := int64(0)

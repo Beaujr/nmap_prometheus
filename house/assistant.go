@@ -126,7 +126,6 @@ func downloadFile(url string, command string) (*psResponse, error) {
 
 	// Get the data
 	fcmServerUrl := fmt.Sprintf("%s%s", *assistantUrl, url)
-	log.Println(fcmServerUrl)
 	resp, err := http.Get(fcmServerUrl)
 	if err != nil {
 		return nil, err
