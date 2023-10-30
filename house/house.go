@@ -786,7 +786,7 @@ type headers struct {
 	metadata.MD
 }
 
-func (md *headers) observeGrpc(_ context.Context, obs api.Observer) error {
+func (md headers) observeGrpc(_ context.Context, obs api.Observer) error {
 	attrs := []attribute.KeyValue{}
 	val := md.Get("home")
 	if len(val) > 0 {

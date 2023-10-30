@@ -18,7 +18,7 @@ type tc struct {
 	*pb.TimedCommands
 }
 
-func (tc *tc) observe(ctx context.Context, obs api.Observer) error {
+func (tc tc) observe(ctx context.Context, obs api.Observer) error {
 	attrs := []attribute.KeyValue{
 		attribute.Key("name").String(strings.ReplaceAll(tc.Id, " ", "_")),
 		attribute.Key("command").String(tc.Command),
