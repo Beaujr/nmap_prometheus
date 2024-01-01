@@ -23,7 +23,7 @@ Tested and working on RaspberryPi 3 and Intel Nuc
 ### Client
 The client is a gRPC/nmap client application which communicates with the server.
 
-Made possible due to [Ullaakut/nmap](github.com/Ullaakut/nmap)
+Made possible due to [Ullaakut/nmap](https://github.com/Ullaakut/nmap)
 #### Flags
 ```bash
     -server=<nmap_prometheus_server>:<port>
