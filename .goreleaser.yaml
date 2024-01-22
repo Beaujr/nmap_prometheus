@@ -16,7 +16,7 @@ builds:
       - arm
   - env:
       - CGO_ENABLED=0
-    binary: app
+    binary: client
     goos:
       - linux
     main: client/main.go
