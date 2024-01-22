@@ -25,6 +25,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,12 +62,14 @@ var devices, lastseen, distance, bledistance, cq api.Float64ObservableGauge
 var grpc, grpcEndpoint api.Int64Counter
 var grpcAgentEndpoint api.Int64ObservableGauge
 var meter api.Meter
+var exporter *prometheus.Exporter
 
 func init() {
-	exporter, err := prometheus.New()
+	promExporter, err := prometheus.New()
 	if err != nil {
 		log.Fatal(err)
 	}
+	exporter = promExporter
 	provider := metric.NewMeterProvider(
 		metric.WithReader(exporter),
 	)
@@ -138,6 +141,7 @@ type Server struct {
 	NotificationClient Notifier
 	ctx                context.Context
 	Logger             *slog.Logger
+	gauges             *observable
 }
 
 func (s *Server) deviceManager(ctx context.Context) error {
@@ -271,6 +275,10 @@ func NewCustomServer(ctx context.Context, e etcdv3.KV, g GoogleAssistant, n Noti
 		NotificationClient:              n,
 		ctx:                             ctx,
 		Logger:                          slog.New(handler),
+		gauges: &observable{
+			Mutex: sync.Mutex{},
+			items: make(map[string]interface{}),
+		},
 	}
 	createCrons(&s)
 	s.loadMetrics()
@@ -415,62 +423,86 @@ func (s *Server) HomeEmptyState(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-type networkDevice struct {
-	*pb.Devices
+type networkDeviceGauge struct {
+	away, lastseen, latency float64
+	attrs                   api.MeasurementOption
 }
 
-func (d *networkDevice) observe(_ context.Context, obs api.Observer) error {
-	away := float64(1)
-	if (time.Now().Unix() - d.GetLastSeen()) > *TimeAwaySeconds {
-		away = float64(0)
+func (o *observable) observe(ctx context.Context, obs api.Observer) error {
+	o.Lock()
+	for _, val := range o.items {
+		switch val.(type) {
+		case *networkDeviceGauge:
+			item := val.(*networkDeviceGauge)
+			obs.ObserveFloat64(devices, item.away, item.attrs)
+			obs.ObserveFloat64(lastseen, item.lastseen, item.attrs)
+			obs.ObserveFloat64(distance, item.latency, item.attrs)
+		case *bluetoothDevice:
+			d := val.(*bluetoothDevice)
+			obs.ObserveFloat64(lastseen, d.lastseen, d.attrs, api.WithAttributes([]attribute.KeyValue{attribute.Key("person").Bool(false)}...))
+			obs.ObserveFloat64(bledistance, d.latency, d.attrs, api.WithAttributes([]attribute.KeyValue{attribute.Key("agent").String(d.agent)}...))
+		case *grpcClient:
+			d := val.(*grpcClient)
+			obs.ObserveInt64(grpcAgentEndpoint, time.Now().Unix(), d.attrs)
+		}
 	}
-	attrs := []attribute.KeyValue{
-		attribute.Key("name").String(d.GetName()),
-		attribute.Key("mac").String(d.GetId().GetMac()),
-		attribute.Key("home").String(d.GetHome()),
-		attribute.Key("person").Bool(d.GetPerson()),
-	}
-	obs.ObserveFloat64(devices, away, api.WithAttributes(attrs...))
-	obs.ObserveFloat64(lastseen, float64(d.GetLastSeen()), api.WithAttributes(attrs...))
-	obs.ObserveFloat64(distance, float64(d.GetLatency()), api.WithAttributes(attrs...))
+	o.Unlock()
 	return nil
 }
 
 type bluetoothDevice struct {
-	*pb.BleDevices
-	agent string
+	lastseen, latency float64
+	attrs             api.MeasurementOption
+	agent             string
 }
 
-func (d *bluetoothDevice) observe(ctx context.Context, obs api.Observer) error {
-	attrs := []attribute.KeyValue{
-		attribute.Key("name").String(d.GetName()),
-		attribute.Key("mac").String(d.GetId()),
-		attribute.Key("home").String(d.GetHome()),
-	}
-	obs.ObserveFloat64(lastseen, float64(d.GetLastSeen()), api.WithAttributes(append(attrs, attribute.Key("person").Bool(false))...))
-	obs.ObserveFloat64(bledistance, float64(d.GetDistance()), api.WithAttributes(append(attrs, attribute.Key("agent").String(d.agent))...))
-	return nil
-}
 func (s *Server) RegisterMetric(item *pb.Devices) {
-	d := &networkDevice{item}
-	_, err := meter.RegisterCallback(d.observe, lastseen, distance, devices)
-	if err != nil {
-		log.Panicln(err.Error())
+	away := float64(1)
+	if (time.Now().Unix() - item.GetLastSeen()) > *TimeAwaySeconds {
+		away = float64(0)
 	}
+
+	attrs := []attribute.KeyValue{
+		attribute.Key("name").String(item.GetName()),
+		attribute.Key("mac").String(item.GetId().GetMac()),
+		attribute.Key("home").String(item.GetHome()),
+		attribute.Key("person").Bool(item.GetPerson()),
+	}
+	s.gauges.Lock()
+	d := networkDeviceGauge{away: away, lastseen: float64(item.GetLastSeen()), latency: float64(item.GetLatency()), attrs: api.WithAttributes(attrs...)}
+	s.gauges.items[item.GetId().GetMac()] = &d
+	s.gauges.Unlock()
+}
+
+type observable struct {
+	sync.Mutex
+	items map[string]interface{}
 }
 
 func (s *Server) RegisterBleMetric(item *pb.BleDevices, agent string) {
-	b := &bluetoothDevice{item, agent}
-	_, err := meter.RegisterCallback(b.observe, bledistance, lastseen)
-	if err != nil {
-		log.Panicln(err.Error())
+	attrs := []attribute.KeyValue{
+		attribute.Key("name").String(item.GetName()),
+		attribute.Key("mac").String(item.GetId()),
+		attribute.Key("home").String(item.GetHome()),
 	}
+	s.gauges.Lock()
+	s.gauges.items[item.GetId()] = &bluetoothDevice{
+		lastseen: float64(item.LastSeen),
+		latency:  float64(item.GetDistance()),
+		agent:    agent,
+		attrs:    api.WithAttributes(attrs...),
+	}
+	s.gauges.Unlock()
 }
 
 func (s *Server) loadMetrics() {
 	knowDevices, err := s.ReadNetworkConfig()
 	if err != nil {
 		s.Logger.Info(err.Error())
+	}
+	_, err = meter.RegisterCallback(s.gauges.observe, lastseen, distance, devices, bledistance, lastseen, grpcAgentEndpoint)
+	if err != nil {
+		log.Panicln(err.Error())
 	}
 	for _, item := range knowDevices {
 		s.RegisterMetric(item)
@@ -484,20 +516,6 @@ func (s *Server) loadMetrics() {
 		s.RegisterBleMetric(item, "etcd")
 	}
 }
-
-//func (s *Server) RecordLastSeenMetric(item *pb.Devices, timestamp int64) {
-//	metrics["lastseen"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(timestamp))
-//	timeAway := s.deviceDetectState(item.LastSeen)
-//	if timeAway > *TimeAwaySeconds {
-//		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(0))
-//	} else {
-//		metrics["hdd"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(1))
-//	}
-//}
-//
-//func (s *Server) RecordDistanceMetric(item *pb.Devices, distance float32) {
-//	metrics["distance"].WithLabelValues(item.Name, item.GetId().GetMac(), item.GetHome(), strconv.FormatBool(item.GetPerson())).Set(float64(distance))
-//}
 
 func (s *Server) callAssistant(command string) (*string, error) {
 	return s.AssistantClient.Call(command)
@@ -771,36 +789,42 @@ func (s *Server) ProcessIncomingAddress(ctx context.Context, in *pb.AddressReque
 	return &pb.Reply{Acknowledged: true}, nil
 }
 func (s *Server) grpcHitsMetrics(ctx context.Context, name string, itemCount int) {
+	md, _ := metadata.FromIncomingContext(ctx)
 	attrs := []attribute.KeyValue{
 		attribute.Key("name").String(name),
 	}
-	grpc.Add(ctx, int64(itemCount), api.WithAttributes(attrs...))
-	md, _ := metadata.FromIncomingContext(ctx)
-	_, err := meter.RegisterCallback(headers{md}.observeGrpc, grpcAgentEndpoint)
-	if err != nil {
-		log.Panicln(err.Error())
-	}
-}
-
-type headers struct {
-	metadata.MD
-}
-
-func (md headers) observeGrpc(_ context.Context, obs api.Observer) error {
-	attrs := []attribute.KeyValue{}
 	val := md.Get("home")
+	home := ""
 	if len(val) > 0 {
 		attrs = append(attrs, attribute.Key("home").String(val[0]))
+		home = val[0]
 	}
 	agentType := md.Get("type")
+	agentDeviceType := ""
 	if len(agentType) > 0 {
 		attrs = append(attrs, attribute.Key("type").String(agentType[0]))
+		agentDeviceType = agentType[0]
 	}
+	client := ""
 	if val := md.Get("client"); len(val) > 0 {
 		attrs = append(attrs, attribute.Key("name").String(val[0]))
+		client = val[0]
+
 	}
-	obs.ObserveInt64(grpcAgentEndpoint, time.Now().Unix(), api.WithAttributes(attrs...))
-	return nil
+	s.gauges.Lock()
+	s.gauges.items[name+agentDeviceType+home+client] = grpcClient{
+		home:      home,
+		agentType: agentDeviceType,
+		name:      client,
+		attrs:     api.WithAttributes(attrs...),
+	}
+	s.gauges.Unlock()
+	grpc.Add(ctx, int64(itemCount), api.WithAttributes(attrs...))
+}
+
+type grpcClient struct {
+	home, agentType, name string
+	attrs                 api.MeasurementOption
 }
 
 func (s *Server) grpcPrometheusMetrics(ctx context.Context, promMetric string, name string) {
