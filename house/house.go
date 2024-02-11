@@ -441,8 +441,8 @@ func (o *observable) observe(ctx context.Context, obs api.Observer) error {
 			d := val.(*bluetoothDevice)
 			obs.ObserveFloat64(lastseen, d.lastseen, d.attrs, api.WithAttributes([]attribute.KeyValue{attribute.Key("person").Bool(false)}...))
 			obs.ObserveFloat64(bledistance, d.latency, d.attrs, api.WithAttributes([]attribute.KeyValue{attribute.Key("agent").String(d.agent)}...))
-		case *grpcClient:
-			d := val.(*grpcClient)
+		case grpcClient:
+			d := val.(grpcClient)
 			obs.ObserveInt64(grpcAgentEndpoint, time.Now().Unix(), d.attrs)
 		}
 	}
