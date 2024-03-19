@@ -27,6 +27,8 @@ jobs:
           make build GOARCH=amd64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_amd64
           make build GOARCH=arm64 GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm64
           make build GOARCH=arm GOOS=linux && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_arm
+          make build GOARCH=arm64 GOOS=darwin && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_darwin_arm64
+          make build GOARCH=amd64 GOOS=darwin && mv bin/beaujr/nmap_prometheus-client bin/beaujr/nmap_prometheus-client_darwin_amd64
           make build GOARCH=amd64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_amd64
           make build GOARCH=arm64 APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm64
           make build GOARCH=arm APP_TYPE=server GOOS=linux && mv bin/beaujr/nmap_prometheus-server bin/beaujr/nmap_prometheus-server_arm
